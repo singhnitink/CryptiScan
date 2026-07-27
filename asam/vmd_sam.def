@@ -14,12 +14,12 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	apt-mark hold surf
 
 	#I have VMD and NAMD packages installed in repos that are accessible from inside MSU's firewall
-	curl http://aspen.prl.msu.edu/repos/apt/ubuntu/vermaaslab.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/vermaaslab.gpg
-	echo "deb [arch=amd64] http://aspen.prl.msu.edu/repos/apt/ubuntu noble universe" | tee /etc/apt/sources.list.d/vermaaslab.list
+	#curl http://aspen.prl.msu.edu/repos/apt/ubuntu/vermaaslab.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/vermaaslab.gpg
+	#echo "deb [arch=amd64] http://aspen.prl.msu.edu/repos/apt/ubuntu noble universe" | tee /etc/apt/sources.list.d/vermaaslab.list
 	apt-get update
 	apt-get install -y python3-scipy python3-tk namd
 	apt-get install -y grace python3-matplotlib
-	apt-get install -y liboptix vmd-plugins vmd-cuda vmd2-plugins vmd2-cuda
+	#apt-get install -y liboptix vmd-plugins vmd-cuda vmd2-plugins vmd2-cuda
 
 	#SAM2 installation
 	apt-get install -y python3-pip git libhdf5-dev
