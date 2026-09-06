@@ -1,0 +1,6 @@
+resid,wt,best_mutant,best_score,top3_options
+263,ILE,VAL,-3.8404,VAL(-3.84); ALA(-4.17); LEU(-4.51)
+231,ILE,VAL,-2.6168,VAL(-2.62); LEU(-3.96); THR(-5.65)
+261,VAL,LEU,-2.7069,LEU(-2.71); ALA(-3.09); ILE(-3.36)
+283,GLY,ALA,-4.1017,ALA(-4.10); SER(-4.77); THR(-5.39)
+226,PRO,ALA,-7.4827,ALA(-7.48); SER(-7.78); GLY(-7.98)

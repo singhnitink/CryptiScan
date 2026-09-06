@@ -1,0 +1,18 @@
+{
+  "source": "1jwp_web_20260905_233649/1jwp_raw.pdb",
+  "protein_file": "1jwp_protein.pdb",
+  "chains": [
+    "A"
+  ],
+  "n_protein_residues": 263,
+  "n_waters_dropped": 274,
+  "ligands": [
+    {
+      "resname": "PO4",
+      "resid": 1,
+      "chain": "A",
+      "n_atoms": 5,
+      "file": "1jwp_ligands/PO4_A1.pdb"
+    }
+  ]
+}
