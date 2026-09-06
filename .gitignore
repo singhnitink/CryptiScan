@@ -1,0 +1,77 @@
+# ==============================================================================
+# CryptiScan .gitignore
+# ==============================================================================
+
+# Apptainer / Singularity Containers (Large SIF files)
+*.sif
+*.simg
+*.sandbox/
+
+# Machine Learning Models & Weights (Large files)
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+*.hdf5
+*.joblib
+*.pkl
+*.npz
+*.msgpack
+*.gguf
+*.ggml
+*.pb
+*.tflite
+# TensorFlow checkpoint shards (e.g. cath_pretrained.data-00000-of-00002)
+*.data-[0-9][0-9][0-9][0-9][0-9]-of-[0-9][0-9][0-9][0-9][0-9]
+*.index
+
+# Weight directories under pipeline/ -- ignored by path as a second layer of
+# defense in addition to the extensions above: these hold ONLY downloaded
+# weights (no source), so any new file dropped in here is assumed to be a
+# large binary artifact, not something to commit.
+pipeline/required_files_weights/prot_t5_xl_uniref50_full_v2/
+pipeline/required_files_weights/sam2_weights/
+
+# External Cloned Repositories (vendored tools with their own .git history --
+# ignored wholesale so git never tries to add their nested .git as a gitlink)
+ESM-Scan/
+cryptic_sites_software/
+
+# Secrets & Environment Configuration
+.env
+.env.*
+*.key
+
+# Pipeline & Simulation Outputs
+pipeline_out/
+pipeline/pipeline_out/
+adk_sam/
+test_output*
+ensemble_output*
+*.log
+
+# Trajectories & Molecular Dynamics Outputs
+*.dcd
+*.xtc
+*.trr
+*.nc
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+.virtual_documents/
+
+# OS Artifacts
+.DS_Store
+Thumbs.db

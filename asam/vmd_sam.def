@@ -16,15 +16,15 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	#I have VMD and NAMD packages installed in repos that are accessible from inside MSU's firewall
 	#curl http://aspen.prl.msu.edu/repos/apt/ubuntu/vermaaslab.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/vermaaslab.gpg
 	#echo "deb [arch=amd64] http://aspen.prl.msu.edu/repos/apt/ubuntu noble universe" | tee /etc/apt/sources.list.d/vermaaslab.list
-	apt-get update
-	apt-get install -y python3-scipy python3-tk namd
-	apt-get install -y grace python3-matplotlib
+	#apt-get update
+	#apt-get install -y python3-scipy python3-tk namd
+	#apt-get install -y grace python3-matplotlib
 	#apt-get install -y liboptix vmd-plugins vmd-cuda vmd2-plugins vmd2-cuda
 
-	#SAM2 installation
+	# SAM2 installation (pinned to stable commit to prevent breaking changes)
 	apt-get install -y python3-pip git libhdf5-dev
-	#PyTorch with CUDA 12.4 support: pytorch is not in standard ububtu library so will need pip
+	# PyTorch with CUDA 12.4 support: pytorch is not in standard ubuntu library so will need pip
 	pip3 install --break-system-packages torch==2.4.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 	git clone https://github.com/giacomo-janson/sam2.git /opt/sam2
-	cd /opt/sam2 && pip3 install --break-system-packages -e .
+	cd /opt/sam2 && git checkout f7374520fe24c3888eef53f337f20d7fffec798c && pip3 install --break-system-packages -e .
 # How to install: apptainer build nodes.sif vmd_sam.def

@@ -1,0 +1,1889 @@
+{
+  "query": {
+    "pdb_id": "1JWP",
+    "chain": "A",
+    "score_type": "raw"
+  },
+  "source": "CryptoBank PLM Local (prot_t5_xl_uniref50_full_v2)",
+  "top_residues": [
+    {
+      "resid": 263,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.9898
+    },
+    {
+      "resid": 231,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.9867
+    },
+    {
+      "resid": 261,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.9823
+    },
+    {
+      "resid": 283,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.9749
+    },
+    {
+      "resid": 226,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.9725
+    }
+  ],
+  "all_residues": [
+    {
+      "resid": 263,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.9898
+    },
+    {
+      "resid": 231,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.9867
+    },
+    {
+      "resid": 261,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.9823
+    },
+    {
+      "resid": 283,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.9749
+    },
+    {
+      "resid": 226,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.9725
+    },
+    {
+      "resid": 225,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.9456
+    },
+    {
+      "resid": 246,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.926
+    },
+    {
+      "resid": 221,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.9221
+    },
+    {
+      "resid": 235,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.9131
+    },
+    {
+      "resid": 250,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.8969
+    },
+    {
+      "resid": 280,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.892
+    },
+    {
+      "resid": 224,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.8661
+    },
+    {
+      "resid": 284,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.8636
+    },
+    {
+      "resid": 279,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.8521
+    },
+    {
+      "resid": 244,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.8463
+    },
+    {
+      "resid": 287,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.8241
+    },
+    {
+      "resid": 220,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.7262
+    },
+    {
+      "resid": 26,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.7229
+    },
+    {
+      "resid": 217,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.712
+    },
+    {
+      "resid": 245,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.6846
+    },
+    {
+      "resid": 276,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.6514
+    },
+    {
+      "resid": 288,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.5516
+    },
+    {
+      "resid": 281,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.5413
+    },
+    {
+      "resid": 247,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.4852
+    },
+    {
+      "resid": 234,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.4608
+    },
+    {
+      "resid": 248,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.4283
+    },
+    {
+      "resid": 277,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.3181
+    },
+    {
+      "resid": 222,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.2274
+    },
+    {
+      "resid": 289,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.2175
+    },
+    {
+      "resid": 236,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.2035
+    },
+    {
+      "resid": 286,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.193
+    },
+    {
+      "resid": 290,
+      "resname_3letter": "TRP",
+      "resname_1letter": "W",
+      "chain": "A",
+      "score": 0.1899
+    },
+    {
+      "resid": 216,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.1648
+    },
+    {
+      "resid": 282,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.1596
+    },
+    {
+      "resid": 27,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.137
+    },
+    {
+      "resid": 249,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.1123
+    },
+    {
+      "resid": 278,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.1033
+    },
+    {
+      "resid": 229,
+      "resname_3letter": "TRP",
+      "resname_1letter": "W",
+      "chain": "A",
+      "score": 0.0954
+    },
+    {
+      "resid": 285,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0898
+    },
+    {
+      "resid": 273,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0877
+    },
+    {
+      "resid": 130,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0803
+    },
+    {
+      "resid": 218,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0673
+    },
+    {
+      "resid": 28,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0654
+    },
+    {
+      "resid": 259,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0552
+    },
+    {
+      "resid": 29,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0482
+    },
+    {
+      "resid": 275,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0476
+    },
+    {
+      "resid": 223,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0467
+    },
+    {
+      "resid": 272,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0462
+    },
+    {
+      "resid": 36,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0444
+    },
+    {
+      "resid": 260,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0433
+    },
+    {
+      "resid": 254,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.041
+    },
+    {
+      "resid": 35,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0351
+    },
+    {
+      "resid": 73,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0347
+    },
+    {
+      "resid": 32,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0337
+    },
+    {
+      "resid": 30,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0328
+    },
+    {
+      "resid": 212,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0323
+    },
+    {
+      "resid": 274,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0313
+    },
+    {
+      "resid": 264,
+      "resname_3letter": "TYR",
+      "resname_1letter": "Y",
+      "chain": "A",
+      "score": 0.0307
+    },
+    {
+      "resid": 237,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0305
+    },
+    {
+      "resid": 39,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.0297
+    },
+    {
+      "resid": 129,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0256
+    },
+    {
+      "resid": 243,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0236
+    },
+    {
+      "resid": 228,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0234
+    },
+    {
+      "resid": 70,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0224
+    },
+    {
+      "resid": 251,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0224
+    },
+    {
+      "resid": 55,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0218
+    },
+    {
+      "resid": 238,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0209
+    },
+    {
+      "resid": 147,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0186
+    },
+    {
+      "resid": 31,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0175
+    },
+    {
+      "resid": 252,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0168
+    },
+    {
+      "resid": 52,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.0167
+    },
+    {
+      "resid": 219,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0167
+    },
+    {
+      "resid": 262,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0167
+    },
+    {
+      "resid": 214,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0165
+    },
+    {
+      "resid": 48,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0154
+    },
+    {
+      "resid": 230,
+      "resname_3letter": "PHE",
+      "resname_1letter": "F",
+      "chain": "A",
+      "score": 0.015
+    },
+    {
+      "resid": 34,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0146
+    },
+    {
+      "resid": 269,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.0146
+    },
+    {
+      "resid": 232,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0141
+    },
+    {
+      "resid": 233,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.013
+    },
+    {
+      "resid": 256,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0129
+    },
+    {
+      "resid": 33,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0127
+    },
+    {
+      "resid": 132,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.0122
+    },
+    {
+      "resid": 215,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.012
+    },
+    {
+      "resid": 54,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0117
+    },
+    {
+      "resid": 257,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0117
+    },
+    {
+      "resid": 188,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0116
+    },
+    {
+      "resid": 53,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0106
+    },
+    {
+      "resid": 168,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0106
+    },
+    {
+      "resid": 255,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0105
+    },
+    {
+      "resid": 241,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0103
+    },
+    {
+      "resid": 211,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0098
+    },
+    {
+      "resid": 258,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0098
+    },
+    {
+      "resid": 167,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0097
+    },
+    {
+      "resid": 127,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0093
+    },
+    {
+      "resid": 40,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0091
+    },
+    {
+      "resid": 38,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0086
+    },
+    {
+      "resid": 191,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0079
+    },
+    {
+      "resid": 270,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0078
+    },
+    {
+      "resid": 50,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0075
+    },
+    {
+      "resid": 58,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0073
+    },
+    {
+      "resid": 195,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.007
+    },
+    {
+      "resid": 227,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0067
+    },
+    {
+      "resid": 51,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0064
+    },
+    {
+      "resid": 166,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0063
+    },
+    {
+      "resid": 43,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.006
+    },
+    {
+      "resid": 42,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0059
+    },
+    {
+      "resid": 56,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0059
+    },
+    {
+      "resid": 265,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0059
+    },
+    {
+      "resid": 154,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.0056
+    },
+    {
+      "resid": 213,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0056
+    },
+    {
+      "resid": 210,
+      "resname_3letter": "TRP",
+      "resname_1letter": "W",
+      "chain": "A",
+      "score": 0.0053
+    },
+    {
+      "resid": 208,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0052
+    },
+    {
+      "resid": 151,
+      "resname_3letter": "PHE",
+      "resname_1letter": "F",
+      "chain": "A",
+      "score": 0.0046
+    },
+    {
+      "resid": 171,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0046
+    },
+    {
+      "resid": 242,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0045
+    },
+    {
+      "resid": 41,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0041
+    },
+    {
+      "resid": 59,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0041
+    },
+    {
+      "resid": 136,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.004
+    },
+    {
+      "resid": 196,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0039
+    },
+    {
+      "resid": 266,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0039
+    },
+    {
+      "resid": 63,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0038
+    },
+    {
+      "resid": 37,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0036
+    },
+    {
+      "resid": 60,
+      "resname_3letter": "PHE",
+      "resname_1letter": "F",
+      "chain": "A",
+      "score": 0.0036
+    },
+    {
+      "resid": 240,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0035
+    },
+    {
+      "resid": 126,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0034
+    },
+    {
+      "resid": 190,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0034
+    },
+    {
+      "resid": 57,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0033
+    },
+    {
+      "resid": 146,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0032
+    },
+    {
+      "resid": 155,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0032
+    },
+    {
+      "resid": 267,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0032
+    },
+    {
+      "resid": 61,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0031
+    },
+    {
+      "resid": 46,
+      "resname_3letter": "TYR",
+      "resname_1letter": "Y",
+      "chain": "A",
+      "score": 0.003
+    },
+    {
+      "resid": 83,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.003
+    },
+    {
+      "resid": 170,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.003
+    },
+    {
+      "resid": 128,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0029
+    },
+    {
+      "resid": 164,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0029
+    },
+    {
+      "resid": 268,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0029
+    },
+    {
+      "resid": 74,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0028
+    },
+    {
+      "resid": 64,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0027
+    },
+    {
+      "resid": 184,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0026
+    },
+    {
+      "resid": 194,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0026
+    },
+    {
+      "resid": 49,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0025
+    },
+    {
+      "resid": 124,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0022
+    },
+    {
+      "resid": 101,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0021
+    },
+    {
+      "resid": 131,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0021
+    },
+    {
+      "resid": 153,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.0021
+    },
+    {
+      "resid": 82,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.002
+    },
+    {
+      "resid": 88,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.002
+    },
+    {
+      "resid": 150,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.002
+    },
+    {
+      "resid": 192,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.002
+    },
+    {
+      "resid": 65,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0019
+    },
+    {
+      "resid": 125,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0019
+    },
+    {
+      "resid": 85,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0018
+    },
+    {
+      "resid": 87,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0018
+    },
+    {
+      "resid": 100,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.0018
+    },
+    {
+      "resid": 209,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0018
+    },
+    {
+      "resid": 91,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0017
+    },
+    {
+      "resid": 197,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0017
+    },
+    {
+      "resid": 143,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0016
+    },
+    {
+      "resid": 62,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0015
+    },
+    {
+      "resid": 141,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0015
+    },
+    {
+      "resid": 149,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0015
+    },
+    {
+      "resid": 202,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0015
+    },
+    {
+      "resid": 69,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 104,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 112,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 140,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 175,
+      "resname_3letter": "ASN",
+      "resname_1letter": "N",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 186,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 187,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0014
+    },
+    {
+      "resid": 113,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0013
+    },
+    {
+      "resid": 183,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0013
+    },
+    {
+      "resid": 185,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0013
+    },
+    {
+      "resid": 207,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0013
+    },
+    {
+      "resid": 71,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0012
+    },
+    {
+      "resid": 271,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0012
+    },
+    {
+      "resid": 44,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 92,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 99,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 115,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 142,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 145,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 201,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0011
+    },
+    {
+      "resid": 86,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 93,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 102,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 120,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 121,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 158,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 176,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 177,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 205,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.001
+    },
+    {
+      "resid": 105,
+      "resname_3letter": "TYR",
+      "resname_1letter": "Y",
+      "chain": "A",
+      "score": 0.0009
+    },
+    {
+      "resid": 198,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0009
+    },
+    {
+      "resid": 89,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 139,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 144,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 148,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 159,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 206,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.0008
+    },
+    {
+      "resid": 114,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0007
+    },
+    {
+      "resid": 135,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0007
+    },
+    {
+      "resid": 193,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0007
+    },
+    {
+      "resid": 67,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 77,
+      "resname_3letter": "CYS",
+      "resname_1letter": "C",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 94,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 96,
+      "resname_3letter": "HIS",
+      "resname_1letter": "H",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 97,
+      "resname_3letter": "TYR",
+      "resname_1letter": "Y",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 116,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 157,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0006
+    },
+    {
+      "resid": 47,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 66,
+      "resname_3letter": "PHE",
+      "resname_1letter": "F",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 79,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 81,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 90,
+      "resname_3letter": "GLN",
+      "resname_1letter": "Q",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 98,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 103,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 123,
+      "resname_3letter": "CYS",
+      "resname_1letter": "C",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 137,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 138,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 165,
+      "resname_3letter": "TRP",
+      "resname_1letter": "W",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 169,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 173,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 174,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 178,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 204,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0005
+    },
+    {
+      "resid": 72,
+      "resname_3letter": "PHE",
+      "resname_1letter": "F",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 84,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 95,
+      "resname_3letter": "ILE",
+      "resname_1letter": "I",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 110,
+      "resname_3letter": "GLU",
+      "resname_1letter": "E",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 111,
+      "resname_3letter": "LYS",
+      "resname_1letter": "K",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 133,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 152,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 156,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 189,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0004
+    },
+    {
+      "resid": 75,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 76,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 78,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 80,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 107,
+      "resname_3letter": "PRO",
+      "resname_1letter": "P",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 108,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 162,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 163,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 172,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 179,
+      "resname_3letter": "ASP",
+      "resname_1letter": "D",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 199,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 200,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0003
+    },
+    {
+      "resid": 45,
+      "resname_3letter": "GLY",
+      "resname_1letter": "G",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 106,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 109,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 117,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 122,
+      "resname_3letter": "LEU",
+      "resname_1letter": "L",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 134,
+      "resname_3letter": "ALA",
+      "resname_1letter": "A",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 161,
+      "resname_3letter": "ARG",
+      "resname_1letter": "R",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 180,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0002
+    },
+    {
+      "resid": 68,
+      "resname_3letter": "MET",
+      "resname_1letter": "M",
+      "chain": "A",
+      "score": 0.0001
+    },
+    {
+      "resid": 118,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0001
+    },
+    {
+      "resid": 160,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0001
+    },
+    {
+      "resid": 203,
+      "resname_3letter": "SER",
+      "resname_1letter": "S",
+      "chain": "A",
+      "score": 0.0001
+    },
+    {
+      "resid": 119,
+      "resname_3letter": "VAL",
+      "resname_1letter": "V",
+      "chain": "A",
+      "score": 0.0
+    },
+    {
+      "resid": 181,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0
+    },
+    {
+      "resid": 182,
+      "resname_3letter": "THR",
+      "resname_1letter": "T",
+      "chain": "A",
+      "score": 0.0
+    }
+  ],
+  "n_total_residues": 263
+}

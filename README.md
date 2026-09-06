@@ -1,8 +1,7 @@
-We will populate this file for the cryptic pocket algo.
+# CryptiScan
 
-Use the mutation code like this: 
-python3 modeller_mutate.py 1dhk 1 HIS A > mutation.log 
-% here 1dhk is the pdb filename 1dhk.pdb, 1 is the residue nymber to be mutated, HIS is the new reidue at residue number 1 and A is chain name
+CryptiScan is an automated computational pipeline for predicting, perturbing, and validating **cryptic binding pockets** in proteins.
+
 ```mermaid
 ---
 config:
@@ -11,28 +10,25 @@ config:
 ---
 flowchart TB
     A["CryptoBank Database"] -- "scrape_cryptobank.py" --> B["Top-N Cryptic Residues"]
-    C["RCSB PDB"] -- Fetch & Clean --> D["PDB Structure File"]
-    B --> E["check the group of the amino acid (eg. hydrophobic) then mutate it with the amino acids from other groups"]
-    G["MODELLER mutate.py"] --> H["Mutant Structure(s)"]
-    H --> I["aSAMt/BioEmu Container"]
+    C["RCSB PDB"] -- "Fetch & Clean" --> D["PDB Structure File"]
+    B --> E["ESM-Scan (ESM-1v Model)"]
+    D --> E
+    E -- "Score all 19 substitutions; pick highest score" --> G["MODELLER mutate.py"]
+    G --> H["Relaxed Mutant Structure(s)"]
+    H --> I["SAM2 / BioEmu Sampling"]
     I --> J["Holo-like Conformations"]
-    K["Pocket Analysis"] -- MDpocket + RMSD --> L["Validate Holo-like Opening"]
-    L --> M{"Validation Success?"}
-    M -- Yes --> N["Target Identified"]
-    D --> A
-    E --> G
-
-     A
-     B
-     C
-     D
-     E
-     G
-     H
-     I
-     J
-     K
-     L
-     M
-     N
+    J --> K["Pocket Analysis (MDpocket + RMSD)"]
+    K --> L{"Validation Success?"}
+    L -- Yes --> M["Cryptic Target Validated"]
+    L -- No --> N["Iterate / Refine"]
 ```
+
+## Pipeline Overview
+
+1. **CryptoBank Scoring**: Identifies the top residues predicted to form cryptic pockets.
+2. **PDB Preparation**: Fetches the experimental structure and cleans chain records.
+3. **ESM-Scan (Zero-Shot Scoring)**: Evaluates all 19 alternative amino acid mutations at each cryptic residue using ESM-1v log-probabilities and selects the mutation with the highest evolutionary/fitness score.
+4. **MODELLER Mutagenesis**: Constructs mutant 3D structures with sidechain energy minimization and molecular dynamics simulated annealing.
+5. **SAM2 Ensemble Sampling**: Generates conformational ensembles on the mutant structures to sample cryptic pocket opening.
+
+For instructions on launching the pipeline, see [pipeline/README.md](file:///home/nsingh/Desktop/github/CryptiScan/pipeline/README.md).
