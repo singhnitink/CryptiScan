@@ -186,10 +186,15 @@ def check_numbering(pdb_file, chain, residues):
 # ---------------------------------------------------------------------------
 # STAGE 4: ESM-Scan mutation scoring (select best mutation per residue)
 # ---------------------------------------------------------------------------
-def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_python):
+def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_python,
+                 mutation_set="charged_polar"):
     """
-    Uses ESM-Scan to evaluate all 19 alternative amino acids at each cryptic position
-    and selects the mutation with the highest ESM-1v zero-shot fitness score.
+    Uses ESM-Scan to score substitutions at each cryptic position and select the
+    highest-scoring one from --mutation_set (charged/polar by default, so the
+    mutation actually destabilises the closed state).
+
+    A residue whose wild type is already charged/polar is marked skipped: it is
+    scored for the report but not mutated.
     """
     res_list_str = ",".join(str(r["resid"]) for r in residues)
     out_json = workdir / f"{pdb_file.stem}_esm_results.json"
@@ -201,11 +206,13 @@ def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_
         "--chain", chain,
         "--residues", res_list_str,
         "--model_path", str(esm_model),
+        "--mutation_set", str(mutation_set),
         "--output_json", str(out_json),
         "--output_csv", str(out_csv)
     ]
     log("Stage 4: Running ESM-Scan (predicting best mutation for each residue)...")
     log(f"         Model: {esm_model}")
+    log(f"         Mutation set: {mutation_set}")
     log(f"         ESM Python: {esm_python}")
     subprocess.run(cmd, check=True)
 
@@ -215,16 +222,39 @@ def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_
     # Attach the best mutation to each residue in the list
     for r in residues:
         resid = r["resid"]
-        if resid in esm_map:
-            best_info = esm_map[resid]
-            r["target_mut"] = best_info["best_mut_aa3"]
-            r["esm_score"] = best_info["best_score"]
-            r["esm_candidates"] = best_info["candidates_ranked"]
-            log(f"         Residue {r['resname_3letter']}{resid} -> Best ESM mutation: {r['target_mut']} (score: {r['esm_score']:+.4f})")
-        else:
-            log(f"Warning: No ESM score for resid {resid}, defaulting to ALA")
-            r["target_mut"] = "ALA"
-            r["esm_score"] = 0.0
+        info = esm_map.get(resid)
+
+        if info is None:
+            # Never invent a substitution here. This used to default to ALA,
+            # which is nonpolar -- the exact opposite of what the restricted
+            # set is for -- and it happened silently.
+            log(f"WARNING: no ESM score for resid {resid}; it will NOT be mutated.")
+            r["target_mut"] = None
+            r["esm_score"] = None
+            r["skip_mutation"] = True
+            r["skip_reason"] = "no ESM score returned for this residue"
+            continue
+
+        r["esm_candidates"] = info.get("candidates_ranked", [])
+        r["esm_all_candidates"] = info.get("all_candidates_ranked", [])
+        r["selection_set"] = info.get("selection_set")
+
+        if info.get("skip_mutation"):
+            reason = ("wild type is already in the selection set"
+                      if info.get("wt_in_selection_set")
+                      else "no candidate available in the selection set")
+            log(f"         Residue {r['resname_3letter']}{resid} -> SKIPPED ({reason})")
+            r["target_mut"] = None
+            r["esm_score"] = None
+            r["skip_mutation"] = True
+            r["skip_reason"] = reason
+            continue
+
+        r["target_mut"] = info["best_mut_aa3"]
+        r["esm_score"] = info["best_score"]
+        r["skip_mutation"] = False
+        log(f"         Residue {r['resname_3letter']}{resid} -> Best ESM mutation: "
+            f"{r['target_mut']} (score: {r['esm_score']:+.4f})")
 
     return residues
 
@@ -322,6 +352,12 @@ def main():
                         "or 'manual' (mutates all residues to --mutate_to)")
     p.add_argument("--mutate_to", default="GLU",
                    help="Target residue type (3-letter) if strategy is 'manual'.")
+    p.add_argument("--mutation_set", default="charged_polar",
+                   help="Which amino acids ESM-Scan may choose from: charged, polar, "
+                        "charged_polar (default), all, or a custom comma list. "
+                        "Charged/polar substitutions destabilise the closed state so "
+                        "the cryptic pocket can open; 'all' restores the unrestricted "
+                        "19-way scan, which tends to pick conservative nonpolar swaps.")
     
     p.add_argument("--mode", choices=["independent", "combined"], default="combined",
                    help="combined = ONE file with all mutations (default); "
@@ -397,7 +433,8 @@ def main():
             suffix = args.mutate_to.lower()
         else:
             residues = run_esm_scan(pdb_file, args.chain, residues, workdir,
-                                    esm_script_path, args.esm_model, args.esm_python)
+                                    esm_script_path, args.esm_model, args.esm_python,
+                                    mutation_set=args.mutation_set)
             suffix = "esm"
     else:
         mutate_to = args.mutate_to.upper()
@@ -409,16 +446,33 @@ def main():
             r["esm_score"] = None
         suffix = mutate_to.lower()
 
+    # Residues whose wild type is already charged/polar are scored but not
+    # mutated -- swapping one polar residue for another will not open a pocket.
+    to_mutate = [r for r in residues if r.get("target_mut")]
+    n_skipped = len(residues) - len(to_mutate)
+    if n_skipped:
+        log(f"Stage 4: {len(to_mutate)} of {len(residues)} residues will be mutated; "
+            f"{n_skipped} skipped:")
+        for r in residues:
+            if not r.get("target_mut"):
+                log(f"         {r['resname_3letter']}{r['resid']} -- "
+                    f"{r.get('skip_reason', 'no mutation selected')}")
+    if not to_mutate:
+        log("ERROR: every cryptic residue was skipped, so there is nothing to mutate.")
+        log("       All of them are already charged/polar. Consider a different "
+            "--mutation_set, or raise --top to reach more residues.")
+        sys.exit(1)
+
     # Stage 5: MODELLER mutagenesis
     mutants = []
     if not args.skip_modeller:
         log(f"Stage 5: MODELLER ({args.mode} mode)")
         if args.mode == "combined":
-            mutants = mutate_combined(modeller_path, pdb_base, residues,
+            mutants = mutate_combined(modeller_path, pdb_base, to_mutate,
                                       args.chain, workdir, args.modeller_python,
-                                      args.top, suffix=suffix)
+                                      len(to_mutate), suffix=suffix)
         else:
-            mutants = mutate_independent(modeller_path, pdb_base, residues,
+            mutants = mutate_independent(modeller_path, pdb_base, to_mutate,
                                          args.chain, workdir, args.modeller_python)
     else:
         log("Stage 5: skipped (--skip_modeller)")
@@ -441,10 +495,16 @@ def main():
         "chain": args.chain,
         "mode": args.mode,
         "strategy": args.strategy,
+        "mutation_set": args.mutation_set if args.strategy == "esm" else None,
         "score_type": args.score_type,
         "cleaned": not args.no_clean,
         "protein_all_chains": protein_all.name,
         "source_structure": pdb_file.name,
+        "n_residues_scored": len(residues),
+        "n_residues_mutated": len(to_mutate),
+        "n_residues_skipped": n_skipped,
+        # Every scored residue is kept, skipped ones included, so the report can
+        # show their charged/polar scores.
         "cryptic_residues": residues,
         "mutants": mutants,
         "sam2_input": sam2_input.name if sam2_input else None,

@@ -29,8 +29,9 @@ This directory contains the unified, end-to-end CryptiScan workflow.
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ 4. ESM-Scan                             [ESM-1v]              │
-  │    Scores all 19 substitutions at each cryptic site,          │
-  │    keeps the highest-scoring mutation per position            │
+  │    Scores every substitution, then picks the best CHARGED     │
+  │    or POLAR one. Conservative nonpolar swaps (ILE->VAL)       │
+  │    would leave the pocket shut.                               │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
@@ -51,7 +52,7 @@ This directory contains the unified, end-to-end CryptiScan workflow.
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ 7. Report + Sequences                                         │
-  │    report.txt, <PDB>_<chain>_wildtype.fasta,                  │
+  │    <jobname>_report.txt, <PDB>_<chain>_wildtype.fasta,        │
   │    <PDB>_<chain>_mutant.fasta                                 │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
@@ -105,6 +106,7 @@ CHAIN="A"                      # Target chain identifier
 TOP=5                          # Number of top cryptic residues to mutate
 MODE="combined"                # "combined" = one structure; "independent" = N mutants
 STRATEGY="esm"                 # "esm" = pick substitutions with ESM-Scan
+MUTATION_SET="charged_polar"   # charged_polar | charged | polar | all | "ASP,GLU,..."
 JOBNAME="${JOBNAME:-1jwp}"     # Names the output folder and zip
 MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"
 ```
@@ -132,12 +134,12 @@ Everything is packaged into a single timestamped archive:
 ├── 1jwp_prep.json                   what was kept, split out, and dropped
 ├── 1jwp.pdb                         SELECTED CHAIN - used by every stage below
 ├── 1JWP_A_cryptic.json              cryptic residue predictions
-├── 1jwp_esm_summary.csv             all 19 substitutions scored per site
+├── 1jwp_esm_summary.csv             ESM score for every charged/polar option
 ├── 1jwp_top5_esm_mutant.pdb         MODELLER mutant
 ├── sam2_input.pdb                   mutant, validated for SAM2
 ├── ensemble_output.*                SAM2 / aSAM conformational ensemble
 ├── 1JWP_manifest.json               run manifest
-├── report.txt                       human-readable summary of the whole run
+├── 1jwp_local_report.txt            human-readable summary of the whole run
 ├── 1JWP_A_wildtype.fasta            wild-type sequence of the selected chain
 └── 1JWP_A_mutant.fasta              mutant sequence
 ```
@@ -184,6 +186,7 @@ install`, no weights to download.
 | `launch_pipeline_web.sh` | Launcher for the web version. |
 | `pipeline_local.def` | Apptainer definition for the local image. |
 | `pipeline_web.def` | Apptainer definition for the web image. |
+| `download_weights.sh` | Downloads the ~15 GB of weights. **Run this first.** |
 | `required_files_weights/` | Everything baked into the images (see manifest below). |
 
 ### `required_files_weights/` manifest
@@ -207,7 +210,7 @@ most common cause of a failed build.
 | `sam2_weights/weights/mdcath_1.0/` | 1.0 GB |
 | **total** | **~15 GB** |
 
-Quick check:
+Populate it with `bash download_weights.sh`. Quick check:
 
 ```bash
 du -sh required_files_weights          # expect ~15 G
@@ -251,6 +254,33 @@ language model:
 4. All 19 alternative amino acids are evaluated at each cryptic site. The amino
    acid with the **highest (best) score** is chosen for the mutation.
 5. All scores are saved to `<PDB>_esm_summary.csv` for full transparency.
+
+---
+
+## Downloading the Weights
+
+The weight files are ~15 GB in total, far too large for GitHub, so they are not
+in the repository. After cloning, fetch them with:
+
+```bash
+cd pipeline/
+bash download_weights.sh
+```
+
+That places everything in `required_files_weights/`, which is where the `.def`
+files expect it. Re-running is safe: completed files are skipped and interrupted
+ones resume. If you only intend to build the **web** image, skip the 6.8 GB
+ProtT5 download with `bash download_weights.sh --skip-prot-t5`.
+
+| Weight | Size | Source |
+|---|---|---|
+| `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB | `dl.fbaipublicfiles.com` (Facebook Research) |
+| `prot_t5_xl_uniref50_full_v2/` | 6.8 GB | HuggingFace `ThorbenF/prot_t5_xl_uniref50_full_v2` |
+| `sam2_weights/` | 1.0 GB | GitHub release `giacomo-janson/sam2` `data-1.0` |
+
+ProtT5 is pulled file by file rather than with `git clone`, because cloning that
+repository also drags in a ~6.8 GB `.git` LFS cache holding a second copy of the
+same weights.
 
 ---
 

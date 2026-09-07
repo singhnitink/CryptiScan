@@ -6,7 +6,7 @@ Reads the structured outputs the pipeline already writes -- <PDB>_manifest.json,
 <PDB>_<chain>_cryptic.json, <pdb>_esm_results.json and <pdb>_prep.json -- rather
 than scraping stderr, so nothing depends on log formatting.
 
-Also writes the wild-type and mutant sequences as FASTA.
+Writes <jobname>_report.txt plus the wild-type and mutant sequences as FASTA.
 
 Deliberately dependency-free (standard library only) so it runs in either conda
 env, or on the host. mdtraj is used only if present, to count ensemble frames.
@@ -28,6 +28,7 @@ THREE_TO_ONE = {
     'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
     'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
 }
+THREE_OF = {v: k for k, v in THREE_TO_ONE.items()}
 
 W = 80
 def rule(c="-"):
@@ -179,14 +180,61 @@ def build(workdir, jobname, container):
     out.append(" ESM chooses WHICH amino acid to place at each cryptic position;")
     out.append(" the positions themselves come from the cryptic prediction above.")
     out.append("")
-    out.append("   Residue      Chosen    Score     Next best alternatives")
-    out.append("   -----------  --------  --------  ------------------------------------")
+
+    mset = manifest.get("mutation_set")
+    if mset:
+        out.append(f" Mutation set : {mset}")
+        out.append("")
+        out.append(" Substitutions are restricted to charged/polar residues on purpose.")
+        out.append(" ESM-1v scores evolutionary fitness, so left unrestricted it favours")
+        out.append(" whatever preserves the fold -- for a buried hydrophobic residue that")
+        out.append(" means another hydrophobic one (ILE -> VAL), which would not open the")
+        out.append(" pocket. Burying a charge or polar group is destabilising, which is")
+        out.append(" what drives opening, so these scores are expected to be negative.")
+        out.append("")
+
+    # Score matrix: every candidate in the selection set, for every residue --
+    # including residues that were skipped.
+    cols = []
     for e in esm:
-        res = f"{e.get('wt_aa3','?')}{e.get('resid','?')}"
-        alts = "; ".join(f"{c['mut_aa3']}({c['esm_score']:+.2f})"
-                         for c in e.get("candidates_ranked", [])[1:4])
-        out.append(f"   {res:<11}  {e.get('best_mut_aa3','?'):<8}  "
-                   f"{e.get('best_score', 0):>+8.4f}  {alts}")
+        for a in e.get("selection_set", []):
+            three = THREE_OF.get(a, a)
+            if three not in cols:
+                cols.append(three)
+    cols = sorted(cols)
+
+    # A restricted set fits as a matrix; the unrestricted 19 would run ~170
+    # columns wide, so fall back to the compact listing there.
+    if cols and len(cols) <= 12:
+        hdr = "   " + f"{'Residue':<10}" + "".join(f"{c:>8}" for c in cols) + "   chosen"
+        out.append(hdr)
+        out.append("   " + "-" * (len(hdr) - 3))
+        for e in esm:
+            res = f"{e.get('wt_aa3','?')}{e.get('resid','?')}"
+            scores = {c["mut_aa3"]: c["esm_score"]
+                      for c in e.get("all_candidates_ranked", e.get("candidates_ranked", []))}
+            cells = "".join(
+                f"{scores[c]:>8.2f}" if c in scores else f"{'-':>8}" for c in cols)
+            if e.get("skip_mutation"):
+                chosen = "SKIPPED (wt already in set)"
+            else:
+                chosen = f"{e.get('best_mut_aa3','?')} ({e.get('best_score', 0):+.2f})"
+            out.append(f"   {res:<10}{cells}   {chosen}")
+        out.append("")
+        out.append("   '-' marks the wild-type residue, which is never a candidate.")
+    else:
+        # Unrestricted run: fall back to the original compact listing.
+        out.append("   Residue      Chosen    Score     Next best alternatives")
+        out.append("   -----------  --------  --------  ------------------------------------")
+        for e in esm:
+            res = f"{e.get('wt_aa3','?')}{e.get('resid','?')}"
+            alts = "; ".join(f"{c['mut_aa3']}({c['esm_score']:+.2f})"
+                             for c in e.get("candidates_ranked", [])[1:4])
+            # Skipped residues carry None for both fields.
+            chosen = e.get("best_mut_aa3") or "SKIPPED"
+            sc = e.get("best_score")
+            sc_txt = f"{sc:>+8.4f}" if isinstance(sc, (int, float)) else f"{'-':>8}"
+            out.append(f"   {res:<11}  {chosen:<8}  {sc_txt}  {alts}")
     out.append("")
     out.append(f" Full ranking of all 19 substitutions per site: {base}_esm_summary.csv")
     out.append("")
@@ -194,6 +242,16 @@ def build(workdir, jobname, container):
     # ----------------------------------------------------------- mutagenesis
     out.append(head("4. IN SILICO MUTAGENESIS (MODELLER)"))
     mode = manifest.get("mode", "?")
+    n_scored = manifest.get("n_residues_scored")
+    n_mut = manifest.get("n_residues_mutated")
+    n_skip = manifest.get("n_residues_skipped")
+    if n_scored is not None:
+        out.append(f" Residues scored  : {n_scored}")
+        out.append(f" Residues mutated : {n_mut}")
+        if n_skip:
+            out.append(f" Residues skipped : {n_skip}  "
+                       f"(wild type already charged/polar -- see the table above)")
+        out.append("")
     out.append(f" Mode : {mode}")
     if mode == "combined":
         out.append("        all mutations applied sequentially into ONE structure;")
@@ -278,7 +336,7 @@ def build(workdir, jobname, container):
     out.append(" End of report")
     out.append(rule("="))
 
-    return "\n".join(out) + "\n", (pdb_id, chain, wt_seq, mut_seq, len(applied))
+    return "\n".join(out) + "\n", (pdb_id, chain, wt_seq, mut_seq, len(applied), jobname)
 
 
 def main():
@@ -286,13 +344,17 @@ def main():
     p.add_argument("--workdir", required=True)
     p.add_argument("--jobname", default=None)
     p.add_argument("--container", default=None)
-    p.add_argument("--output", default=None, help="Report path (default <workdir>/report.txt)")
+    p.add_argument("--output", default=None,
+                   help="Report path (default <workdir>/<jobname>_report.txt)")
     a = p.parse_args()
 
     workdir = Path(a.workdir)
-    text, (pdb_id, chain, wt_seq, mut_seq, n_mut) = build(workdir, a.jobname, a.container)
+    text, (pdb_id, chain, wt_seq, mut_seq, n_mut, jobname) = build(
+        workdir, a.jobname, a.container)
 
-    out = Path(a.output) if a.output else workdir / "report.txt"
+    # Named after the job, so reports stay identifiable once they are pulled
+    # out of their run directories and collected together.
+    out = Path(a.output) if a.output else workdir / f"{jobname}_report.txt"
     out.write_text(text)
     print(f"[REPORT] wrote {out}", file=sys.stderr)
 

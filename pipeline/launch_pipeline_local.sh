@@ -13,7 +13,7 @@
 #   5.  Run MODELLER to build the relaxed 3D mutant structure
 #   5b. Validate the mutant for SAM2 -> sam2_input.pdb
 #   6.  Run SAM2 / aSAM ensemble generation on that chain
-#   7.  Write report.txt plus wild-type / mutant FASTA sequences
+#   7.  Write <jobname>_report.txt plus wild-type / mutant FASTA sequences
 #   8.  Compress all results into a .zip archive
 #
 # Requirements on the host PC:
@@ -43,6 +43,12 @@ CHAIN="A"                      # Target protein chain identifier
 TOP=5                          # Number of top cryptic residues to mutate
 MODE="combined"                # "combined" = all mutations in 1 structure; "independent" = N separate mutants
 STRATEGY="esm"                 # "esm" = evaluates substitutions via ESM-Scan protein language model
+MUTATION_SET="charged_polar"   # Which residues ESM may choose from:
+                               #   charged_polar (default) | charged | polar | all | "ASP,GLU,..."
+                               # Charged/polar substitutions destabilise the closed state so the
+                               # cryptic pocket can open in MD. "all" reverts to the unrestricted
+                               # 19-way scan, which tends to pick conservative nonpolar swaps
+                               # (ILE->VAL) that leave the pocket shut.
 JOBNAME="${JOBNAME:-1jwp}_local"     # Job name for folder and zip naming (e.g. "1lzt", "1jwp")
 
 # ------------------------------------------------------------------------------
@@ -158,6 +164,7 @@ $CONTAINER_RUNTIME exec --nv \
         --esm_script /opt/pipeline/esm_scanner.py \
         --modeller_script /opt/pipeline/modeller_mutate.py \
         --prep_script /opt/pipeline/clean_structure.py \
+        --mutation_set "$MUTATION_SET" \
         --esm_python /opt/conda/bin/python3 \
         --prep_python /opt/conda/envs/prep/bin/python3 \
         --modeller_python /opt/conda/bin/python3 \

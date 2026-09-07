@@ -14,8 +14,22 @@ How ESM Scoring Works:
        score = log_prob(Mutant) - log_prob(WT)
    - A score near 0 or positive means the mutation is favored / tolerated.
    - A negative score means the mutation is disfavored / deleterious.
-4. For each target residue, all 19 alternative amino acids are scored.
-   The mutation with the HIGHEST (best) score is selected.
+4. All 19 alternatives are scored at every target residue, but the mutation is
+   chosen from a restricted set (--mutation_set, default charged_polar): the one
+   with the HIGHEST score within that set wins.
+
+Why the set is restricted:
+--------------------------
+ESM-1v measures evolutionary fitness, so unrestricted it picks whatever best
+preserves the fold -- for a buried hydrophobic residue that means another
+hydrophobic one (ILE -> VAL). That defeats the purpose here. These mutations
+exist to destabilise the closed state so the cryptic pocket opens during MD,
+which needs a charged or polar residue buried in a hydrophobic environment.
+Scores will therefore be markedly negative; that is expected, not a failure.
+
+A residue whose wild type is already charged/polar is scored but NOT mutated
+(GLU -> ASP would not open anything). Such residues are reported with
+skip_mutation: true and are excluded from the MODELLER stage.
 
 Usage (Standalone):
 -------------------
@@ -23,8 +37,9 @@ Usage (Standalone):
         --pdb 1JWP.pdb \
         --chain A \
         --residues 26,45,102 \
+        --mutation_set charged_polar \
         --model_path /opt/models/esm1v_t33_650M_UR90S_1.pt \
-        --output esm_results.json
+        --output_json esm_results.json
 """
 
 import argparse
@@ -44,6 +59,57 @@ THREE_TO_ONE = {
 }
 ONE_TO_THREE = {v: k for k, v in THREE_TO_ONE.items()}
 ALL_AMINO_ACIDS = sorted(list(ONE_TO_THREE.keys()))  # 20 standard 1-letter codes
+
+# ---------------------------------------------------------------------------
+# Substitution sets
+# ---------------------------------------------------------------------------
+# ESM-1v is an evolutionary fitness model: unrestricted, it favours whatever
+# best preserves the fold, which for a buried hydrophobic residue means another
+# hydrophobic one (ILE -> VAL). That is useless here -- the point of mutating a
+# cryptic site is to DESTABILISE the closed state so the pocket opens in MD.
+# Burying a charge or a polar group costs desolvation energy and adds steric
+# strain, which is what actually drives opening. Restricting the candidates
+# lets ESM still rank within that set, so we take the least evolutionarily
+# disruptive of the destabilising options rather than an arbitrary one.
+CHARGED = "DERKH"   # ASP GLU ARG LYS HIS (His is titratable; polar regardless)
+POLAR = "NQSTY"     # ASN GLN SER THR TYR
+# CYS is deliberately absent: a free cysteine invites spurious disulfides and MD
+# artefacts. TRP is aromatic/nonpolar. Both remain reachable via a custom list.
+MUTATION_SETS = {
+    "charged": CHARGED,
+    "polar": POLAR,
+    "charged_polar": CHARGED + POLAR,
+    "all": "".join(ALL_AMINO_ACIDS),
+}
+
+
+def resolve_mutation_set(spec: str) -> List[str]:
+    """Turn a preset name or a custom comma list into 1-letter codes.
+
+    Accepts either form, so '--mutation_set ASP,GLU' and '--mutation_set D,E'
+    are equivalent.
+    """
+    spec = (spec or "").strip()
+    if spec.lower() in MUTATION_SETS:
+        return sorted(set(MUTATION_SETS[spec.lower()]))
+
+    out = set()
+    for tok in spec.replace(" ", "").split(","):
+        if not tok:
+            continue
+        t = tok.upper()
+        if len(t) == 3 and t in THREE_TO_ONE:
+            out.add(THREE_TO_ONE[t])
+        elif len(t) == 1 and t in ONE_TO_THREE:
+            out.add(t)
+        else:
+            log(f"ERROR: '{tok}' is not a standard amino acid (1- or 3-letter).")
+            log(f"       Presets: {', '.join(sorted(MUTATION_SETS))}")
+            sys.exit(1)
+    if not out:
+        log(f"ERROR: --mutation_set '{spec}' resolved to no amino acids.")
+        sys.exit(1)
+    return sorted(out)
 
 
 def log(msg: str):
@@ -96,6 +162,7 @@ def score_residue_mutations(
     resid_to_seqidx: Dict[int, int],
     model_path: str,
     device: str = None,
+    selection_set: List[str] = None,
 ) -> List[Dict]:
     """
     Runs ESM-1v on the sequence and calculates mutation scores for each target residue.
@@ -106,6 +173,10 @@ def score_residue_mutations(
         resid_to_seqidx: Mapping from PDB resid to 0-based index in sequence.
         model_path: Path to pre-trained ESM-1v weights (.pt file).
         device: 'cuda' or 'cpu' (auto-detects GPU if available).
+        selection_set: 1-letter codes the mutation may be chosen from. A residue
+                       whose wild type is already in this set is scored but
+                       flagged skip_mutation, since swapping like for like
+                       (e.g. GLU->ASP) will not open a pocket.
 
     Returns:
         results: List of dictionaries containing the best mutation and
@@ -166,38 +237,61 @@ def score_residue_mutations(
         # so sequence index 0 corresponds to token position 1.
         wt_prob = token_probs[0, 1 + seq_idx, wt_tok].item()
 
-        # Score all 19 alternative amino acids
-        candidates = []
+        # Score every alternative once; the selection set only decides which of
+        # them may be chosen, so the full 19 stay available as a record.
+        def score_of(mt_aa1):
+            mt_tok = alphabet.get_idx(mt_aa1)
+            mt_prob = token_probs[0, 1 + seq_idx, mt_tok].item()
+            # Zero-shot score: difference in log-probability (mutant - WT)
+            return round(float(mt_prob - wt_prob), 4)
+
+        all_candidates, candidates = [], []
         for mt_aa1 in ALL_AMINO_ACIDS:
             if mt_aa1 == wt_aa1:
                 continue  # Skip wild-type
-
-            mt_tok = alphabet.get_idx(mt_aa1)
-            mt_prob = token_probs[0, 1 + seq_idx, mt_tok].item()
-
-            # Zero-shot score: difference in log-probability (mutant - WT)
-            esm_score = mt_prob - wt_prob
-
-            candidates.append({
+            entry = {
                 "mut_aa1": mt_aa1,
                 "mut_aa3": ONE_TO_THREE[mt_aa1],
-                "esm_score": round(float(esm_score), 4),
-            })
+                "esm_score": score_of(mt_aa1),
+            }
+            all_candidates.append(entry)
+            if mt_aa1 in selection_set:
+                candidates.append(dict(entry))
 
-        # Sort candidates descending: highest score = most favored mutation
+        # Sort descending: highest score = most favored mutation
+        all_candidates.sort(key=lambda x: x["esm_score"], reverse=True)
         candidates.sort(key=lambda x: x["esm_score"], reverse=True)
-        best = candidates[0]
 
-        log(f"Residue {wt_aa3}{resid} -> Best ESM mutation: {best['mut_aa3']} (score: {best['esm_score']:+.4f})")
+        # A wild type that is already charged/polar cannot be usefully swapped
+        # for another one -- GLU->ASP will not open anything -- so score it for
+        # the report but do not hand it to MODELLER.
+        wt_in_set = wt_aa1 in selection_set
+        if wt_in_set:
+            log(f"Residue {wt_aa3}{resid} -> SKIPPED "
+                f"(wild-type is already in the selection set)")
+            best = None
+        elif not candidates:
+            # Cannot happen with the built-in presets, but a custom set of one
+            # residue equal to the wild type would empty the list.
+            log(f"Residue {wt_aa3}{resid} -> SKIPPED (no candidates in the selection set)")
+            best = None
+        else:
+            best = candidates[0]
+            log(f"Residue {wt_aa3}{resid} -> Best ESM mutation: "
+                f"{best['mut_aa3']} (score: {best['esm_score']:+.4f})")
 
         results.append({
             "resid": resid,
             "wt_aa1": wt_aa1,
             "wt_aa3": wt_aa3,
-            "best_mut_aa1": best["mut_aa1"],
-            "best_mut_aa3": best["mut_aa3"],
-            "best_score": best["esm_score"],
+            "best_mut_aa1": best["mut_aa1"] if best else None,
+            "best_mut_aa3": best["mut_aa3"] if best else None,
+            "best_score": best["esm_score"] if best else None,
+            "skip_mutation": best is None,
+            "wt_in_selection_set": wt_in_set,
+            "selection_set": list(selection_set),
             "candidates_ranked": candidates,
+            "all_candidates_ranked": all_candidates,
         })
 
     return results
@@ -210,13 +304,28 @@ def save_reports(results: List[Dict], output_json: str, output_csv: str):
         json.dump(results, f, indent=2)
     log(f"Saved JSON report -> {output_json}")
 
-    # 2. Save human-readable CSV summary
+    # 2. Save human-readable CSV summary: one column per candidate in the
+    #    selection set, so every charged/polar score is visible at a glance
+    #    -- including for residues that were skipped.
+    sel = []
+    for r in results:
+        for a in r.get("selection_set", []):
+            if a not in sel:
+                sel.append(a)
+    sel_cols = [ONE_TO_THREE[a] for a in sorted(sel)]
+
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["resid", "wt", "best_mutant", "best_score", "top3_options"])
+        writer.writerow(["resid", "wt", "status", "best_mutant", "best_score"] + sel_cols)
         for r in results:
-            top3 = "; ".join(f"{c['mut_aa3']}({c['esm_score']:+.2f})" for c in r["candidates_ranked"][:3])
-            writer.writerow([r["resid"], r["wt_aa3"], r["best_mut_aa3"], r["best_score"], top3])
+            scores = {c["mut_aa3"]: c["esm_score"] for c in r["all_candidates_ranked"]}
+            status = "skipped" if r.get("skip_mutation") else "mutated"
+            writer.writerow(
+                [r["resid"], r["wt_aa3"], status,
+                 r["best_mut_aa3"] or "", r["best_score"] if r["best_score"] is not None else ""]
+                # blank where the candidate IS the wild type, so the gap is visible
+                + [scores.get(c, "") for c in sel_cols]
+            )
     log(f"Saved CSV report  -> {output_csv}")
 
 
@@ -232,10 +341,21 @@ def main():
                         default=os.environ.get("ESM_MODEL", "/opt/models/esm1v_t33_650M_UR90S_1.pt"),
                         help="Path to pre-trained ESM-1v model checkpoint")
     parser.add_argument("--device", default=None, choices=["cuda", "cpu"], help="Compute device (default: auto)")
+    parser.add_argument("--mutation_set", default="charged_polar",
+                        help="Amino acids the mutation may be chosen from: a preset "
+                             "(" + ", ".join(sorted(MUTATION_SETS)) + ") or a custom "
+                             "comma list in 1- or 3-letter form (e.g. 'D,E' or 'ASP,GLU'). "
+                             "Restricting to charged/polar residues is what destabilises "
+                             "the closed state so the pocket can open; 'all' restores the "
+                             "unrestricted 19-way scan.")
     parser.add_argument("--output_json", default="esm_scan_results.json", help="Output JSON path")
     parser.add_argument("--output_csv", default="esm_scan_summary.csv", help="Output CSV path")
 
     args = parser.parse_args()
+
+    selection_set = resolve_mutation_set(args.mutation_set)
+    log(f"Mutation set '{args.mutation_set}': "
+        f"{', '.join(ONE_TO_THREE[a] for a in selection_set)}")
 
     # Parse target residue numbers
     target_resids = [int(r.strip()) for r in args.residues.split(",") if r.strip()]
@@ -251,7 +371,14 @@ def main():
         resid_to_seqidx=resid_to_seqidx,
         model_path=args.model_path,
         device=args.device,
+        selection_set=selection_set,
     )
+
+    n_skip = sum(1 for r in results if r.get("skip_mutation"))
+    if n_skip:
+        log(f"{n_skip} of {len(results)} residues skipped "
+            f"(wild type already in the selection set); they are scored in the "
+            f"reports but will not be mutated.")
 
     # Save reports
     save_reports(results, args.output_json, args.output_csv)
