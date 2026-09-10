@@ -198,7 +198,7 @@ $CONTAINER_RUNTIME exec --nv \
         -i "$WORKDIR/protein.pdb" \
         -o "$WORKDIR/ensemble_output" \
         --data_dir "/opt/sam2_weights" \
-        -n 8 \
+        -n 1000 \
         -b 4 \
         -T 320 \
         -d cuda
