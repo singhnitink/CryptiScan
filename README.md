@@ -16,7 +16,7 @@ flowchart TB
     D -- "CryptoBank Space (web)" --> E
     C --> F["ESM-Scan (ESM-1v Model)"]
     E --> F
-    F -- "Score all 19 substitutions; pick highest score" --> G["MODELLER mutate.py"]
+    F -- "Score polar 10 substitutions; pick highest score" --> G["MODELLER mutate.py"]
     G --> H["Mutant Structure (single chain)"]
     H --> I["SAM2 Ensemble Generation"]
     I --> J["report.txt + FASTA + manifest.json"]
