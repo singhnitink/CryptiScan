@@ -98,3 +98,5 @@ htmlcov/
 .DS_Store
 Thumbs.db
 .claude/
+# Old standalone copy kept locally; the pipeline uses pipeline/required_files_weights/modeller_mutate.py
+/modeller_mutate.py
