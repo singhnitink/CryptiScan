@@ -30,6 +30,12 @@ THREE_TO_ONE = {
 }
 THREE_OF = {v: k for k, v in THREE_TO_ONE.items()}
 
+SKIP_LABELS = {
+    "wild type is already in the selection set": "skipped, wt already charged/polar",
+    "no candidate available in the selection set": "skipped, no candidate in set",
+    "no ESM score returned for this residue": "skipped, no ESM score",
+}
+
 W = 80
 def rule(c="-"):
     return c * W
@@ -89,6 +95,18 @@ def ensemble_frames(workdir):
                 return struct.unpack("<i", fp.read(4))[0]
         except Exception:
             return None
+
+
+def cluster_meta(workdir):
+    # asam_cluster_analysis.py writes KEY=VALUE lines meant to be sourced by bash
+    path = workdir / "ensemble_clusters" / "cluster_meta.sh"
+    if not path.exists():
+        return None
+    meta = {}
+    for line in path.read_text().splitlines():
+        key, _, value = line.partition("=")
+        meta[key.strip()] = value.strip()
+    return meta
 
 
 def build(workdir, jobname, container):
@@ -162,16 +180,32 @@ def build(workdir, jobname, container):
     out.append(head("2. CRYPTIC POCKET PREDICTION"))
     out.append(f" Engine       : {engine}")
     out.append(f" Score type   : {manifest.get('score_type', '?')}")
-    tops = cryptic.get("top_residues", [])
-    out.append(f" Residues     : top {len(tops)} of {cryptic.get('n_total_residues', '?')}")
+    # The residues the run examined, in rank order: the requested number of
+    # mutable residues plus any skipped on the way down the ranking.
+    examined = manifest.get("cryptic_residues") or cryptic.get("top_residues", [])
+    n_req = manifest.get("n_mutations_requested")
+    n_ranked = manifest.get("n_residues_ranked") or cryptic.get("n_total_residues", "?")
+    out.append(f" Residues     : ranks 1-{len(examined)} of {n_ranked} examined")
+    if n_req is not None:
+        out.append(f" Mutations    : {n_req} requested")
     out.append("")
-    out.append("   Rank  Residue      Crypticity")
-    out.append("   ----  -----------  ----------")
-    for i, r in enumerate(tops, 1):
+    out.append("   Rank  Residue      Crypticity  Status")
+    out.append("   ----  -----------  ----------  ------------------------------")
+    for i, r in enumerate(examined, 1):
         res = f"{r['resname_3letter']}{r['resid']}"
         sc = r.get("score")
-        out.append(f"   {i:>4}  {res:<11}  {sc:.4f}" if isinstance(sc, (int, float))
-                   else f"   {i:>4}  {res:<11}  {sc}")
+        sc_txt = f"{sc:.4f}" if isinstance(sc, (int, float)) else str(sc)
+        if r.get("target_mut"):
+            status = f"mutate -> {r['target_mut']}"
+        elif "target_mut" in r:
+            status = SKIP_LABELS.get(r.get("skip_reason"), "skipped")
+        else:
+            status = ""
+        out.append(f"   {r.get('rank', i):>4}  {res:<11}  {sc_txt:<10}  {status}")
+    if any(r.get("skip_mutation") for r in examined):
+        out.append("")
+        out.append(" A skipped residue is replaced by the next one down the ranking, so")
+        out.append(" the requested number of residues is still mutated.")
     out.append("")
 
     # ------------------------------------------------------------- ESM-Scan
@@ -246,11 +280,16 @@ def build(workdir, jobname, container):
     n_mut = manifest.get("n_residues_mutated")
     n_skip = manifest.get("n_residues_skipped")
     if n_scored is not None:
-        out.append(f" Residues scored  : {n_scored}")
-        out.append(f" Residues mutated : {n_mut}")
+        if n_req is not None:
+            out.append(f" Mutations requested : {n_req}")
+        out.append(f" Residues examined   : {n_scored}  (crypticity ranks 1-{n_scored})")
+        out.append(f" Residues mutated    : {n_mut}")
         if n_skip:
-            out.append(f" Residues skipped : {n_skip}  "
-                       f"(wild type already charged/polar -- see the table above)")
+            out.append(f" Residues skipped    : {n_skip}  "
+                       f"(wild type already charged/polar -- see section 2)")
+        if n_req is not None and n_mut is not None and n_mut < n_req:
+            out.append(f" WARNING: only {n_mut} of the {n_req} requested residues could be")
+            out.append(f"          mutated; no other residue in chain {chain} qualifies.")
         out.append("")
     out.append(f" Mode : {mode}")
     if mode == "combined":
@@ -317,10 +356,19 @@ def build(workdir, jobname, container):
         out.append(f" Frames generated : {n}")
         out.append(f" Input structure  : {manifest.get('sam2_input')}")
         out.append(" Files            : ensemble_output.top.pdb, ensemble_output.traj.dcd")
+        clusters = cluster_meta(workdir)
+        if clusters and clusters.get("ASAM_USED_CLUSTERING") == "true":
+            out.append(f" Clusters         : {clusters.get('ASAM_N_CLUSTERS_USED')} representative frames"
+                       " (PCA + k-means on CA coordinates)")
+            out.append(" Representatives  : ensemble_clusters/clustering/cluster_representatives.dcd")
+        elif clusters:
+            out.append(" Clusters         : skipped (too few frames to cluster)")
+        else:
+            out.append(" Clusters         : not run (clustering stage failed or was skipped)")
         out.append("")
         out.append(" NOTE: SAM2 renumbers residues from 0 and drops the C-terminal OXT")
-        out.append("       atom, so load the trajectory with ensemble_output.top.pdb as")
-        out.append("       the topology, not the input PDB.")
+        out.append("       atom, so load the trajectory and the cluster representatives")
+        out.append("       with ensemble_output.top.pdb as the topology, not the input PDB.")
     else:
         out.append(" No ensemble found (SAM2 stage did not run or produced no output).")
     out.append("")

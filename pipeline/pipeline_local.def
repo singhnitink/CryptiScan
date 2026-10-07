@@ -1,9 +1,7 @@
 Bootstrap: docker
 From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 
-# ==============================================================================
 # CryptiScan - LOCAL / OFFLINE container
-# ==============================================================================
 # Cryptic-pocket prediction runs locally with ProtT5 (no HuggingFace Space call).
 # Everything the pipeline needs at runtime is baked into this image: the driver
 # scripts, the ESM-1v checkpoint, the ProtT5 weights and the SAM2 weights.
@@ -13,7 +11,6 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 # recipient of this .sif will not have.
 #
 # Build:  cd pipeline/ && sudo apptainer build pipeline_local.sif pipeline_local.def
-# ==============================================================================
 
 %files
 	# Driver scripts -> /opt/pipeline
@@ -25,6 +22,7 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	required_files_weights/modeller_mutate.py /opt/pipeline/modeller_mutate.py
 	required_files_weights/clean_structure.py /opt/pipeline/clean_structure.py
 	required_files_weights/make_report.py /opt/pipeline/make_report.py
+	required_files_weights/asam_cluster_analysis.py /opt/pipeline/asam_cluster_analysis.py
 
 	# Model weights -> /opt/models and /opt/sam2_weights
 	# NOTE: the ProtT5 destination name must keep the substring "prot_t5" --
@@ -50,8 +48,9 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	/opt/conda/bin/conda config --set solver classic
 	/opt/conda/bin/conda config --add channels defaults
 
-	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER)
-	/opt/conda/bin/conda install -y salilab::modeller
+	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER).
+	# Pinned because the launchers and the paths below hardcode modeller-10.8.
+	/opt/conda/bin/conda install -y salilab::modeller=10.8
 
 	# Configure Modeller config.py to read the license key from the environment at runtime
 	/opt/conda/bin/python3 -c "
@@ -70,12 +69,10 @@ for f in configs:
     print('Configured dynamic runtime license in:', f)
 "
 
-	# --------------------------------------------------------------------------
 	# Python stack. Every version is pinned: an unpinned build drifts (an earlier
 	# image picked up pandas 3.x and huggingface_hub 1.x, which breaks the
 	# vendored CryptoBank loader). Torch goes first, from the cu124 index, so the
 	# later installs cannot pull a different build from PyPI.
-	# --------------------------------------------------------------------------
 	/opt/conda/bin/pip install --no-cache-dir \
 		torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
 		--index-url https://download.pytorch.org/whl/cu124
@@ -114,22 +111,19 @@ for f in configs:
 	# Surface any dependency conflict at build time rather than mid-run
 	/opt/conda/bin/pip check || echo "WARNING: pip reported dependency conflicts (see above)"
 
-	# --------------------------------------------------------------------------
-	# Separate conda env for structure preparation (MDAnalysis).
+	# Separate conda env for structure preparation and ensemble clustering
+	# (MDAnalysis, scipy).
 	# Kept out of the main env so MDAnalysis and its dependency tree can never
 	# perturb the pinned torch / mdtraj / numpy stack that SAM2 and ESM rely on.
 	# run_pipeline.py calls it via --prep_python.
-	# --------------------------------------------------------------------------
 	/opt/conda/bin/conda create -y -n prep -c conda-forge --override-channels \
 		python=3.12 numpy=1.26.4 mdanalysis=2.7.0
 	/opt/conda/bin/conda clean -y --all
 
-	# --------------------------------------------------------------------------
 	# Make the baked payload readable by ANY uid.
 	# %files preserves the source permissions, and sam2_weights arrives as
 	# 0750/0640. That reads fine for the user who built the image and is denied
 	# for everyone else -- which would make this .sif unusable when shared.
-	# --------------------------------------------------------------------------
 	chmod -R a+rX /opt/pipeline /opt/models /opt/sam2_weights /opt/sam2 /opt/conda
 
 	# Scratch cache dir for HuggingFace; never written to in practice because the
@@ -152,7 +146,7 @@ for f in configs:
 %test
 	# Without this a failing check below would print and still exit 0.
 	set -e
-	echo "--- python packages ---"
+	echo "python packages:"
 	/opt/conda/bin/python3 -c "
 import importlib, sys
 mods = ['torch','esm','Bio','numpy','pandas','scipy','mdtraj','diffusers','tree','transformers','datasets','sentencepiece','peft','huggingface_hub','gradio_client','sam','sam.scripts.generate_ensemble']
@@ -165,24 +159,33 @@ for m in mods:
         print('  MISSING %-18s (%s)' % (m, type(e).__name__)); bad.append(m)
 sys.exit(1 if bad else 0)
 "
-	echo "--- MODELLER install ---"
+	echo "MODELLER install:"
 	# Not an "import modeller" check: that would validate the licence key, which
 	# is only supplied at run time. Verify the install and the config patch.
-	test -d /opt/conda/lib/modeller-10.8 && echo "  OK      /opt/conda/lib/modeller-10.8"
-	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py \
-		&& echo "  OK      config.py reads the licence key from the environment"
+	# Each check is its own command: under /bin/sh, set -e ignores a failure
+	# on the left of "&&", so "test ... && echo OK" could never fail the build.
+	test -d /opt/conda/lib/modeller-10.8
+	echo "  OK      /opt/conda/lib/modeller-10.8"
+	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py
+	echo "  OK      config.py reads the licence key from the environment"
 
-	echo "--- SAM2 patch ---"
+	echo "SAM2 patch:"
 	test -f /opt/sam2/src/sam/scripts/generate_ensemble.py
-	! grep -q '_LOGGER\.infox' /opt/sam2/src/sam/scripts/generate_ensemble.py
+	# set -e also ignores a failing "! cmd", so test for the typo explicitly.
+	if grep -q '_LOGGER\.infox' /opt/sam2/src/sam/scripts/generate_ensemble.py; then
+		echo "  FAIL    generate_ensemble.py still calls _LOGGER.infox"
+		exit 1
+	fi
 	echo "  OK      generate_ensemble.py present and infox typo patched"
 
-	echo "--- structure-preparation env (isolated from the main env) ---"
+	echo "structure-preparation env (isolated from the main env):"
 	test -x /opt/conda/envs/prep/bin/python3
 	/opt/conda/envs/prep/bin/python3 -c "
-import MDAnalysis, numpy, sys
+import MDAnalysis, numpy, scipy, sys
+import MDAnalysis.analysis.align, scipy.cluster.vq
 print('  OK      MDAnalysis        %s' % MDAnalysis.__version__)
 print('  OK      numpy (prep env)  %s' % numpy.__version__)
+print('  OK      scipy (prep env)  %s' % scipy.__version__)
 "
 	# The whole point of the separate env: MDAnalysis must not have perturbed
 	# the pinned numpy that torch / mdtraj / SAM2 depend on in the main env.
@@ -196,7 +199,7 @@ print('  OK      numpy (main env)  %s  (unperturbed)' % numpy.__version__)
 	/opt/conda/bin/python3 /opt/pipeline/make_report.py --help > /dev/null
 	echo "  OK      make_report.py runs in the main env"
 
-	echo "--- baked payload present and readable by uid $(id -u) ---"
+	echo "baked payload present and readable by uid $(id -u):"
 	/opt/conda/bin/python3 -c "
 import sys
 paths = [
@@ -207,6 +210,7 @@ paths = [
   '/opt/pipeline/modeller_mutate.py',
   '/opt/pipeline/clean_structure.py',
   '/opt/pipeline/make_report.py',
+  '/opt/pipeline/asam_cluster_analysis.py',
   '/opt/models/esm1v_t33_650M_UR90S_1.pt',
   '/opt/models/prot_t5_xl_uniref50_full_v2/cpt.pth',
   '/opt/models/prot_t5_xl_uniref50_full_v2/model.safetensors',

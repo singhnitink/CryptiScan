@@ -65,6 +65,10 @@ manuscript/
 # Pipeline & Simulation Outputs
 pipeline_out/
 pipeline/pipeline_out/
+# Launcher runs: <jobname>_local_YYYYmmdd_HHMMSS/ and <jobname>_web_YYYYmmdd_HHMMSS/
+# (the .zip archives are already covered by *.zip)
+*_local_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]/
+*_web_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]/
 adk_sam/
 test_output*
 ensemble_output*

@@ -31,12 +31,17 @@ A residue whose wild type is already charged/polar is scored but NOT mutated
 (GLU -> ASP would not open anything). Such residues are reported with
 skip_mutation: true and are excluded from the MODELLER stage.
 
+With --n_mutate N, --residues is read as a ranking (best first). The scan walks
+down it, skipping residues as above, and stops once N residues have a mutation,
+so asking for 5 mutations yields 5 even when some of the top 5 are skipped.
+
 Usage (Standalone):
 -------------------
     python3 esm_scanner.py \
         --pdb 1JWP.pdb \
         --chain A \
-        --residues 26,45,102 \
+        --residues 26,45,102,7,88 \
+        --n_mutate 2 \
         --mutation_set charged_polar \
         --model_path /opt/models/esm1v_t33_650M_UR90S_1.pt \
         --output_json esm_results.json
@@ -163,6 +168,7 @@ def score_residue_mutations(
     model_path: str,
     device: str = None,
     selection_set: List[str] = None,
+    n_mutate: int = 0,
 ) -> List[Dict]:
     """
     Runs ESM-1v on the sequence and calculates mutation scores for each target residue.
@@ -177,6 +183,8 @@ def score_residue_mutations(
                        whose wild type is already in this set is scored but
                        flagged skip_mutation, since swapping like for like
                        (e.g. GLU->ASP) will not open a pocket.
+        n_mutate: Stop once this many residues have a mutation, treating
+                  target_resids as a ranking. 0 scores every residue given.
 
     Returns:
         results: List of dictionaries containing the best mutation and
@@ -217,9 +225,14 @@ def score_residue_mutations(
         token_probs = torch.log_softmax(token_logits, dim=-1).cpu()
 
     results = []
+    n_selected = 0
 
-    # 4. Score each target residue
+    # 4. Score each target residue, in ranked order
     for resid in target_resids:
+        if n_mutate and n_selected >= n_mutate:
+            log(f"Found {n_selected} residues to mutate; stopping before resid {resid}.")
+            break
+
         if resid not in resid_to_seqidx:
             log(f"Warning: Residue {resid} not found in chain sequence. Skipping.")
             continue
@@ -264,8 +277,9 @@ def score_residue_mutations(
 
         # A wild type that is already charged/polar cannot be usefully swapped
         # for another one -- GLU->ASP will not open anything -- so score it for
-        # the report but do not hand it to MODELLER.
-        wt_in_set = wt_aa1 in selection_set
+        # the report but do not hand it to MODELLER. An unrestricted set ('all')
+        # always contains the wild type, so the rule cannot apply there.
+        wt_in_set = wt_aa1 in selection_set and len(selection_set) < len(ALL_AMINO_ACIDS)
         if wt_in_set:
             log(f"Residue {wt_aa3}{resid} -> SKIPPED "
                 f"(wild-type is already in the selection set)")
@@ -277,6 +291,7 @@ def score_residue_mutations(
             best = None
         else:
             best = candidates[0]
+            n_selected += 1
             log(f"Residue {wt_aa3}{resid} -> Best ESM mutation: "
                 f"{best['mut_aa3']} (score: {best['esm_score']:+.4f})")
 
@@ -293,6 +308,10 @@ def score_residue_mutations(
             "candidates_ranked": candidates,
             "all_candidates_ranked": all_candidates,
         })
+
+    if n_mutate and n_selected < n_mutate:
+        log(f"WARNING: only {n_selected} of the {n_mutate} requested residues can be "
+            f"mutated; every other ranked residue was skipped.")
 
     return results
 
@@ -337,6 +356,9 @@ def main():
     parser.add_argument("--pdb", required=True, help="Path to PDB file (e.g. 1JWP.pdb)")
     parser.add_argument("--chain", default="A", help="Target chain ID")
     parser.add_argument("--residues", required=True, help="Comma-separated PDB residue numbers (e.g. 26,45,102)")
+    parser.add_argument("--n_mutate", type=int, default=0,
+                        help="Treat --residues as a ranking and stop once this many residues "
+                             "have a mutation, walking past skipped ones. 0 scores them all.")
     parser.add_argument("--model_path",
                         default=os.environ.get("ESM_MODEL", "/opt/models/esm1v_t33_650M_UR90S_1.pt"),
                         help="Path to pre-trained ESM-1v model checkpoint")
@@ -372,6 +394,7 @@ def main():
         model_path=args.model_path,
         device=args.device,
         selection_set=selection_set,
+        n_mutate=args.n_mutate,
     )
 
     n_skip = sum(1 for r in results if r.get("skip_mutation"))

@@ -51,6 +51,12 @@ This directory contains the unified, end-to-end CryptiScan workflow.
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
+  │ 6b. Ensemble Clustering         [MDAnalysis + scipy]          │
+  │     PCA + k-means on CA, one frame per cluster                │
+  │     -> ensemble_clusters/                                     │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
   │ 7. Report + Sequences                                         │
   │    <jobname>_report.txt, <PDB>_<chain>_wildtype.fasta,        │
   │    <PDB>_<chain>_mutant.fasta                                 │
@@ -69,7 +75,7 @@ This directory contains the unified, end-to-end CryptiScan workflow.
 |---|---|---|
 | **Launcher script** | `launch_pipeline_local.sh` | `launch_pipeline_web.sh` |
 | **Apptainer def** | `pipeline_local.def` | `pipeline_web.def` |
-| **Container image** | `pipeline_local.sif` (~20 GB) | `pipeline_web.sif` (~12 GB) |
+| **Container image** | `pipeline_local.sif` (~15 GB) | `pipeline_web.sif` (~10 GB) |
 | **Stage 1 engine** | Local ProtT5 (`predict_cryptic_local.py`) | CryptoBank HF Space (`scrape_cryptobank.py`) |
 | **Internet needed** | Only to fetch the structure from RCSB (see note) | Yes — stage 1 calls `thorbenf-cryptobank.hf.space` |
 | **Baked-in weights** | ESM-1v, ProtT5-XL + head, SAM2 | ESM-1v, SAM2 |
@@ -103,10 +109,13 @@ The configuration block looks like this:
 ```bash
 PDB="1JWP"                     # PDB accession code, or a path to a local .pdb
 CHAIN="A"                      # Target chain identifier
-TOP=5                          # Number of top cryptic residues to mutate
+TOP=5                          # Number of residues to mutate; a charged/polar wild type is
+                               # skipped and the next-ranked cryptic residue is used instead
 MODE="combined"                # "combined" = one structure; "independent" = N mutants
 STRATEGY="esm"                 # "esm" = pick substitutions with ESM-Scan
 MUTATION_SET="charged_polar"   # charged_polar | charged | polar | all | "ASP,GLU,..."
+N_CLUSTERS=10                  # Max clusters for the SAM2 ensemble
+PCA_DIM=10                     # PCA components used for clustering
 JOBNAME="${JOBNAME:-1jwp}"     # Names the output folder and zip
 MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"
 ```
@@ -138,6 +147,9 @@ Everything is packaged into a single timestamped archive:
 ├── 1jwp_top5_esm_mutant.pdb         MODELLER mutant
 ├── sam2_input.pdb                   mutant, validated for SAM2
 ├── ensemble_output.*                SAM2 / aSAM conformational ensemble
+├── ensemble_clusters/
+│   ├── clustering/cluster_representatives.dcd   one frame per cluster
+│   └── cluster_meta.sh              frame and cluster counts
 ├── 1JWP_manifest.json               run manifest
 ├── 1jwp_local_report.txt            human-readable summary of the whole run
 ├── 1JWP_A_wildtype.fasta            wild-type sequence of the selected chain
@@ -191,9 +203,11 @@ install`, no weights to download.
 
 ### `required_files_weights/` manifest
 
-This directory is the single source of truth for the container contents. Check
-these sizes after copying the folder from OneDrive — a truncated download is the
-most common cause of a failed build.
+This directory is the single source of truth for the container contents. A
+truncated weight file is the most common cause of a broken build, so after copying
+the folder from elsewhere (e.g. OneDrive) run `bash download_weights.sh` once: it
+checks every weight against its SHA-256 and re-downloads only what is missing or
+damaged.
 
 | Path | Size |
 |---|---|
@@ -205,6 +219,7 @@ most common cause of a failed build.
 | `modeller_mutate.py` | 5.7 KB |
 | `clean_structure.py` | 7.0 KB |
 | `make_report.py` | 11 KB |
+| `asam_cluster_analysis.py` | 3.8 KB |
 | `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB |
 | `prot_t5_xl_uniref50_full_v2/` | 6.8 GB |
 | `sam2_weights/weights/mdcath_1.0/` | 1.0 GB |
@@ -223,6 +238,7 @@ Script roles: `run_pipeline.py` orchestrates stages 1–4;
 `scrape_cryptobank.py` queries the HF Space; `esm_scanner.py` runs ESM-1v;
 `modeller_mutate.py` does the point mutagenesis and sidechain minimization;
 `clean_structure.py` does the MDAnalysis structure preparation;
+`asam_cluster_analysis.py` clusters the SAM2 ensemble;
 `make_report.py` builds the run report and FASTA files.
 
 ### Two conda environments inside each image
@@ -230,7 +246,7 @@ Script roles: `run_pipeline.py` orchestrates stages 1–4;
 | Env | Path | Holds |
 |---|---|---|
 | main | `/opt/conda` | torch 2.4.0+cu124, ESM-1v, MODELLER 10.8, SAM2, mdtraj, (local only: transformers/ProtT5) |
-| prep | `/opt/conda/envs/prep` | MDAnalysis 2.7.0 only |
+| prep | `/opt/conda/envs/prep` | MDAnalysis 2.7.0 (and its scipy), used for structure prep and ensemble clustering |
 
 MDAnalysis is deliberately isolated. The main env pins `numpy==1.26.4` because
 `torch 2.4.0` and `mdtraj 1.10.3` require it, and a shared install risks a
@@ -253,7 +269,11 @@ language model:
    $$\text{Score} = \log P(\text{Mutant}) - \log P(\text{WT})$$
 4. All 19 alternative amino acids are evaluated at each cryptic site. The amino
    acid with the **highest (best) score** is chosen for the mutation.
-5. All scores are saved to `<PDB>_esm_summary.csv` for full transparency.
+5. A residue whose wild type is already charged/polar is scored but not
+   mutated, and the next residue down the crypticity ranking takes its place.
+   `TOP=5` therefore always yields 5 mutations; the report lists every
+   residue examined and why any were skipped.
+6. All scores are saved to `<PDB>_esm_summary.csv` for full transparency.
 
 ---
 
@@ -268,8 +288,9 @@ bash download_weights.sh
 ```
 
 That places everything in `required_files_weights/`, which is where the `.def`
-files expect it. Re-running is safe: completed files are skipped and interrupted
-ones resume. If you only intend to build the **web** image, skip the 6.8 GB
+files expect it. Every file is checked against a pinned SHA-256, so a truncated
+or corrupted download is caught here instead of ending up inside an image.
+Re-running is safe: verified files are skipped and interrupted downloads resume. If you only intend to build the **web** image, skip the 6.8 GB
 ProtT5 download with `bash download_weights.sh --skip-prot-t5`.
 
 | Weight | Size | Source |
@@ -290,13 +311,17 @@ Build from inside this directory, so the relative `%files` paths resolve:
 
 ```bash
 cd pipeline/
-sudo apptainer build pipeline_web.sif   pipeline_web.def     # ~12 GB, faster
-sudo apptainer build pipeline_local.sif pipeline_local.def   # ~20 GB
+sudo apptainer build pipeline_web.sif   pipeline_web.def     # ~10 GB, faster
+sudo apptainer build pipeline_local.sif pipeline_local.def   # ~15 GB
 chmod 0644 pipeline_local.sif pipeline_web.sif
 ```
 
 Building needs internet access (base image, conda, pip, the SAM2 clone) and
-roughly 60 GB of free scratch space.
+about 70 GB of free disk for the local image (about 45 GB for the web image).
+At its peak the build holds the downloaded weights, the unpacked image, a
+temporary squashfs and the finished `.sif` all at once. Point `APPTAINER_TMPDIR`
+at a disk with room if `/tmp` is small (with `sudo`, pass it through using
+`sudo -E`).
 
 Verify an image before using or sharing it:
 

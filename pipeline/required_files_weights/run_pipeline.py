@@ -58,7 +58,9 @@ def log(msg):
 # STAGE 3: cryptic residue prediction (CryptoBank web or local ProtT5)
 # ---------------------------------------------------------------------------
 def get_cryptic_residues(pdb, chain, top, score_type, workdir, scraper, python_exe):
-    """Queries CryptoBank API to identify top cryptic residues."""
+    """Queries CryptoBank for crypticity scores and returns the whole chain,
+    ranked best first. The full ranking is needed because skipped residues are
+    replaced by the next ones down."""
     out_json = workdir / f"{pdb}_{chain}_cryptic.json"
     cmd = [python_exe, str(scraper), "--pdb", pdb, "--chain", chain,
            "--top", str(top), "--score_type", score_type, "--output", str(out_json)]
@@ -66,9 +68,11 @@ def get_cryptic_residues(pdb, chain, top, score_type, workdir, scraper, python_e
     log(f"         scraper python: {python_exe}")
     subprocess.run(cmd, check=True)
     data = json.loads(out_json.read_text())
-    residues = data.get("top_residues", [])
-    log(f"         got {len(residues)} cryptic residues: "
-        + ", ".join(f"{r['resname_3letter']}{r['resid']}" for r in residues))
+    residues = data.get("all_residues") or data.get("top_residues", [])
+    for rank, r in enumerate(residues, 1):
+        r["rank"] = rank
+    log(f"         ranked {len(residues)} residues; top {top}: "
+        + ", ".join(f"{r['resname_3letter']}{r['resid']}" for r in residues[:top]))
     return residues
 
 
@@ -187,14 +191,16 @@ def check_numbering(pdb_file, chain, residues):
 # STAGE 4: ESM-Scan mutation scoring (select best mutation per residue)
 # ---------------------------------------------------------------------------
 def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_python,
-                 mutation_set="charged_polar"):
+                 mutation_set="charged_polar", n_mutate=0):
     """
     Uses ESM-Scan to score substitutions at each cryptic position and select the
     highest-scoring one from --mutation_set (charged/polar by default, so the
     mutation actually destabilises the closed state).
 
     A residue whose wild type is already charged/polar is marked skipped: it is
-    scored for the report but not mutated.
+    scored for the report but not mutated. ESM-Scan walks down the ranking past
+    skipped residues until n_mutate residues have a mutation; only the residues
+    it reached are returned.
     """
     res_list_str = ",".join(str(r["resid"]) for r in residues)
     out_json = workdir / f"{pdb_file.stem}_esm_results.json"
@@ -207,17 +213,24 @@ def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_
         "--residues", res_list_str,
         "--model_path", str(esm_model),
         "--mutation_set", str(mutation_set),
+        "--n_mutate", str(n_mutate),
         "--output_json", str(out_json),
         "--output_csv", str(out_csv)
     ]
     log("Stage 4: Running ESM-Scan (predicting best mutation for each residue)...")
     log(f"         Model: {esm_model}")
     log(f"         Mutation set: {mutation_set}")
+    log(f"         Mutations requested: {n_mutate or 'one per residue'}")
     log(f"         ESM Python: {esm_python}")
     subprocess.run(cmd, check=True)
 
     esm_data = json.loads(out_json.read_text())
     esm_map = {item["resid"]: item for item in esm_data}
+
+    # ESM-Scan stops once it has n_mutate residues, so keep the ranking only
+    # down to the last residue it returned.
+    reached = [i for i, r in enumerate(residues) if r["resid"] in esm_map]
+    residues = residues[:reached[-1] + 1] if reached else []
 
     # Attach the best mutation to each residue in the list
     for r in residues:
@@ -343,7 +356,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--pdb", required=True, help="Target PDB code (e.g. 1JWP)")
     p.add_argument("--chain", default="A", help="Target chain ID (default: A)")
-    p.add_argument("--top", type=int, default=5, help="Number of top cryptic residues to mutate")
+    p.add_argument("--top", type=int, default=5,
+                   help="Number of cryptic residues to mutate. With the esm strategy, "
+                        "residues that are skipped are replaced by the next ones down "
+                        "the crypticity ranking, so this many are mutated.")
     p.add_argument("--score_type", choices=["raw", "normalized"], default="raw")
     
     # Mutation strategy: ESM-Scan (default) or manual fixed amino acid
@@ -414,54 +430,59 @@ def main():
     pdb_base = pdb_file.stem
 
     # Stage 3: CryptoBank / local ProtT5 on the selected chain
-    residues = get_cryptic_residues(args.pdb, args.chain, args.top, args.score_type,
-                                    workdir, scraper_path, args.scraper_python)
-    if not residues:
+    ranked = get_cryptic_residues(args.pdb, args.chain, args.top, args.score_type,
+                                  workdir, scraper_path, args.scraper_python)
+    if not ranked:
         log("No cryptic residues returned; stopping.")
         sys.exit(1)
-
-    if args.check_numbering:
-        check_numbering(pdb_file, args.chain, residues)
 
     # Stage 4: Decide mutations (ESM-Scan or Manual)
     if args.strategy == "esm":
         if not os.path.exists(args.esm_model):
             log(f"WARNING: ESM model not found at {args.esm_model}. Falling back to manual '{args.mutate_to}'")
+            residues = ranked[:args.top]
             for r in residues:
                 r["target_mut"] = args.mutate_to.upper()
                 r["esm_score"] = None
             suffix = args.mutate_to.lower()
         else:
-            residues = run_esm_scan(pdb_file, args.chain, residues, workdir,
+            residues = run_esm_scan(pdb_file, args.chain, ranked, workdir,
                                     esm_script_path, args.esm_model, args.esm_python,
-                                    mutation_set=args.mutation_set)
+                                    mutation_set=args.mutation_set, n_mutate=args.top)
             suffix = "esm"
     else:
         mutate_to = args.mutate_to.upper()
         if mutate_to not in VALID_AA3:
             log(f"ERROR: --mutate_to '{mutate_to}' is not a valid amino acid.")
             sys.exit(1)
+        residues = ranked[:args.top]
         for r in residues:
             r["target_mut"] = mutate_to
             r["esm_score"] = None
         suffix = mutate_to.lower()
+
+    if args.check_numbering:
+        check_numbering(pdb_file, args.chain, residues)
 
     # Residues whose wild type is already charged/polar are scored but not
     # mutated -- swapping one polar residue for another will not open a pocket.
     to_mutate = [r for r in residues if r.get("target_mut")]
     n_skipped = len(residues) - len(to_mutate)
     if n_skipped:
-        log(f"Stage 4: {len(to_mutate)} of {len(residues)} residues will be mutated; "
-            f"{n_skipped} skipped:")
+        log(f"Stage 4: {len(to_mutate)} of {len(residues)} residues will be mutated "
+            f"(ranks 1-{len(residues)}); {n_skipped} skipped:")
         for r in residues:
             if not r.get("target_mut"):
                 log(f"         {r['resname_3letter']}{r['resid']} -- "
                     f"{r.get('skip_reason', 'no mutation selected')}")
     if not to_mutate:
-        log("ERROR: every cryptic residue was skipped, so there is nothing to mutate.")
-        log("       All of them are already charged/polar. Consider a different "
-            "--mutation_set, or raise --top to reach more residues.")
+        log("ERROR: every ranked residue was skipped, so there is nothing to mutate.")
+        log("       All of them are already in the mutation set. Consider a different "
+            "--mutation_set.")
         sys.exit(1)
+    if len(to_mutate) < args.top:
+        log(f"WARNING: {args.top} mutations requested but only {len(to_mutate)} residues "
+            f"in chain {args.chain} can be mutated.")
 
     # Stage 5: MODELLER mutagenesis
     mutants = []
@@ -500,6 +521,8 @@ def main():
         "cleaned": not args.no_clean,
         "protein_all_chains": protein_all.name,
         "source_structure": pdb_file.name,
+        "n_mutations_requested": args.top,
+        "n_residues_ranked": len(ranked),
         "n_residues_scored": len(residues),
         "n_residues_mutated": len(to_mutate),
         "n_residues_skipped": n_skipped,
