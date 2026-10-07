@@ -100,7 +100,7 @@ flowchart TB
 |---|---|---|
 | **Launcher script** | `pipeline/launch_pipeline_local.sh` | `pipeline/launch_pipeline_web.sh` |
 | **Apptainer def** | `pipeline/pipeline_local.def` | `pipeline/pipeline_web.def` |
-| **Container image** | `pipeline_local.sif` (~20 GB) | `pipeline_web.sif` (~12 GB) |
+| **Container image** | `pipeline_local.sif` (~15 GB) | `pipeline_web.sif` (~10 GB) |
 | **Stage 1 engine** | Local ProtT5 (`predict_cryptic_local.py`) | CryptoBank HF Space (`scrape_cryptobank.py`) |
 | **Internet needed** | Only to fetch structure from RCSB (see note) | Yes — stage 1 calls `thorbenf-cryptobank.hf.space` |
 | **Baked-in weights** | ESM-1v, ProtT5-XL + head, SAM2 | ESM-1v, SAM2 |
@@ -202,8 +202,8 @@ Build container images:
 
 ```bash
 cd pipeline/
-sudo apptainer build pipeline_web.sif   pipeline_web.def     # ~12 GB, web version
-sudo apptainer build pipeline_local.sif pipeline_local.def   # ~20 GB, local version
+sudo apptainer build pipeline_web.sif   pipeline_web.def     # ~10 GB, web version
+sudo apptainer build pipeline_local.sif pipeline_local.def   # ~15 GB, local version
 chmod 0644 pipeline_local.sif pipeline_web.sif
 ```
 

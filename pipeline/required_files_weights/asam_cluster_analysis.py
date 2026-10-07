@@ -8,6 +8,7 @@ and writes metadata for downstream template extraction.
 
 import sys
 import os
+import json
 import numpy as np
 import scipy.cluster.vq as vq
 import MDAnalysis as mda
@@ -68,17 +69,17 @@ def main():
     centroids, cluster_labels = vq.kmeans2(coords_pca, actual_k, minit='points', seed=42)
 
     # Find representative frame for each cluster (closest frame to centroid)
-    rep_frames = []
+    cluster_of_frame = {}
     for i in range(actual_k):
         cluster_indices = np.where(cluster_labels == i)[0]
         if len(cluster_indices) == 0:
             continue
         centroid = centroids[i]
         distances = np.linalg.norm(coords_pca[cluster_indices] - centroid, axis=1)
-        rep_idx = cluster_indices[np.argmin(distances)]
-        rep_frames.append(rep_idx)
+        rep_idx = int(cluster_indices[np.argmin(distances)])
+        cluster_of_frame[rep_idx] = {"cluster": i, "size": int(len(cluster_indices))}
 
-    rep_frames = sorted(list(set(rep_frames)))
+    rep_frames = sorted(cluster_of_frame)
     print(f"Extracted {len(rep_frames)} representative frames from {actual_k} clusters: {rep_frames}")
 
     # Write representative DCD
@@ -87,6 +88,12 @@ def main():
         for f_idx in rep_frames:
             u.trajectory[f_idx]
             W.write(u.atoms)
+
+    # Which ensemble frame each DCD frame is, and how many frames its cluster holds
+    reps_json = os.path.join(outdir, "clustering", "cluster_representatives.json")
+    with open(reps_json, "w") as f:
+        json.dump([{"dcd_frame": n, "ensemble_frame": f_idx, **cluster_of_frame[f_idx]}
+                   for n, f_idx in enumerate(rep_frames)], f, indent=2)
 
     # Write metadata script
     meta_path = os.path.join(outdir, "cluster_meta.sh")

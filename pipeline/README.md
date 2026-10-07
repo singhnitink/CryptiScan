@@ -149,6 +149,7 @@ Everything is packaged into a single timestamped archive:
 ├── ensemble_output.*                SAM2 / aSAM conformational ensemble
 ├── ensemble_clusters/
 │   ├── clustering/cluster_representatives.dcd   one frame per cluster
+│   ├── clustering/cluster_representatives.json  ensemble frame and size of each cluster
 │   └── cluster_meta.sh              frame and cluster counts
 ├── 1JWP_manifest.json               run manifest
 ├── 1jwp_local_report.txt            human-readable summary of the whole run
@@ -219,7 +220,7 @@ damaged.
 | `modeller_mutate.py` | 5.7 KB |
 | `clean_structure.py` | 7.0 KB |
 | `make_report.py` | 11 KB |
-| `asam_cluster_analysis.py` | 3.8 KB |
+| `asam_cluster_analysis.py` | 4.2 KB |
 | `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB |
 | `prot_t5_xl_uniref50_full_v2/` | 6.8 GB |
 | `sam2_weights/weights/mdcath_1.0/` | 1.0 GB |
