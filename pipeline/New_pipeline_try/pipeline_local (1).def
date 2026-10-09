@@ -1,0 +1,304 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
+
+# ==============================================================================
+# CryptiScan - LOCAL / OFFLINE container
+# ==============================================================================
+# Cryptic-pocket prediction runs locally with ProtT5 (no HuggingFace Space call).
+# Everything the pipeline needs at runtime is baked into this image: the driver
+# scripts, the ESM-1v checkpoint, the ProtT5 weights and the SAM2 weights.
+#
+# The launcher (launch_pipeline_local.sh) therefore uses NO --bind flags. Do not add
+# any: a bind mount silently masks a stale image with host files that a
+# recipient of this .sif will not have.
+#
+# Build:  cd pipeline/ && sudo apptainer build pipeline_local.sif pipeline_local.def
+# ==============================================================================
+
+%files
+	# Driver scripts -> /opt/pipeline
+	required_files_weights/run_pipeline.py /opt/pipeline/run_pipeline.py
+	required_files_weights/predict_cryptic_local.py /opt/pipeline/predict_cryptic_local.py
+	required_files_weights/cryptobank_model_loader.py /opt/pipeline/cryptobank_model_loader.py
+	required_files_weights/scrape_cryptobank.py /opt/pipeline/scrape_cryptobank.py
+	required_files_weights/esm_scanner.py /opt/pipeline/esm_scanner.py
+	required_files_weights/modeller_mutate.py /opt/pipeline/modeller_mutate.py
+	required_files_weights/clean_structure.py /opt/pipeline/clean_structure.py
+	required_files_weights/make_report.py /opt/pipeline/make_report.py
+	# === STAGE 6 === ensemble clustering
+	required_files_weights/asam_cluster_analysis.py /opt/pipeline/asam_cluster_analysis.py
+	# === STAGE 9 === cryptic pocket quantification
+	required_files_weights/cryptic_pocket_analysis.py /opt/pipeline/cryptic_pocket_analysis.py
+	required_files_weights/plot_cryptiscan.py /opt/pipeline/plot_cryptiscan.py
+	required_files_weights/diagnose_fpocket.py /opt/pipeline/diagnose_fpocket.py
+
+	# Model weights -> /opt/models and /opt/sam2_weights
+	# NOTE: the ProtT5 destination name must keep the substring "prot_t5" --
+	# cryptobank_model_loader.load_T5_model_classification() dispatches on it.
+	required_files_weights/esm1v_t33_650M_UR90S_1.pt /opt/models/esm1v_t33_650M_UR90S_1.pt
+	required_files_weights/prot_t5_xl_uniref50_full_v2 /opt/models/prot_t5_xl_uniref50_full_v2
+	required_files_weights/sam2_weights /opt/sam2_weights
+
+%post
+	set -e
+
+	# Update packages (standard official mirrors for universal compatibility)
+	apt-get update
+	apt-get install -y --no-install-recommends software-properties-common curl wget git libhdf5-dev
+
+	# Install miniconda with Python 3.12 (required for PyTorch 2.4.0 cu124 wheels)
+	wget -q https://repo.anaconda.com/miniconda/Miniconda3-py312_24.11.1-0-Linux-x86_64.sh -O /tmp/miniconda.sh
+	bash /tmp/miniconda.sh -b -p /opt/conda
+	rm /tmp/miniconda.sh
+
+	# Suppress Anaconda TOS prompts and configure channels for non-interactive builds
+	/opt/conda/bin/conda config --set auto_activate_base false
+	/opt/conda/bin/conda config --set solver classic
+	/opt/conda/bin/conda config --add channels defaults
+
+	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER)
+	/opt/conda/bin/conda install -y salilab::modeller
+
+	# Configure Modeller config.py to read the license key from the environment at runtime
+	/opt/conda/bin/python3 -c "
+import glob, os
+configs = glob.glob('/opt/conda/lib/modeller-*/modlib/modeller/config.py')
+for f in configs:
+    with open(f, 'r') as fp:
+        lines = fp.readlines()
+    with open(f, 'w') as fp:
+        fp.write('import os\n')
+        for line in lines:
+            if 'license =' in line:
+                fp.write(\"license = os.environ.get('KEY_MODELLER', os.environ.get('KEY_MODELLER10v8', 'XXXX'))\n\")
+            else:
+                fp.write(line)
+    print('Configured dynamic runtime license in:', f)
+"
+
+	# --------------------------------------------------------------------------
+	# Python stack. Every version is pinned: an unpinned build drifts (an earlier
+	# image picked up pandas 3.x and huggingface_hub 1.x, which breaks the
+	# vendored CryptoBank loader). Torch goes first, from the cu124 index, so the
+	# later installs cannot pull a different build from PyPI.
+	# --------------------------------------------------------------------------
+	/opt/conda/bin/pip install --no-cache-dir \
+		torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
+		--index-url https://download.pytorch.org/whl/cu124
+
+	# SAM2's own dependencies are pinned here, BEFORE it is installed, so that
+	# "pip install -e ." finds every floor already satisfied and upgrades
+	# nothing. In particular mdtraj must stay at 1.10.3: 1.11.1+ requires
+	# numpy~=2.0, which would drag numpy out from under torch 2.4.0.
+	/opt/conda/bin/pip install --no-cache-dir \
+		numpy==1.26.4 \
+		scipy==1.13.1 \
+		pandas==2.2.2 \
+		biopython==1.85 \
+		mdtraj==1.10.3 \
+		diffusers==0.32.2 \
+		dm-tree \
+		transformers==4.44.2 \
+		huggingface_hub==0.24.6 \
+		datasets==2.21.0 \
+		peft==0.12.0 \
+		sentencepiece==0.2.0 \
+		matplotlib==3.9.2 \
+		fair-esm==2.0.0 \
+		gradio_client
+
+	# SAM2 (pinned to a stable commit to prevent breaking changes).
+	# This commit provides the src/sam/scripts/ layout, which is what the
+	# launcher imports as "sam.scripts.generate_ensemble". Do not move the pin
+	# back to an older commit: before the src/ move the module lived at the
+	# repository root as scripts/generate_ensemble.py and that import fails.
+	git clone https://github.com/giacomo-janson/sam2.git /opt/sam2
+	cd /opt/sam2 && git checkout ce076ed61482693ee01b3261df869dfbfddf9481 && /opt/conda/bin/pip install -e .
+	# Upstream typo: generate_ensemble.py calls _LOGGER.infox() right before
+	# writing the .top.pdb, which would abort the run at the last step.
+	sed -i 's/_LOGGER.infox/_LOGGER.info/g' /opt/sam2/src/sam/scripts/generate_ensemble.py
+
+	# Surface any dependency conflict at build time rather than mid-run
+	/opt/conda/bin/pip check || echo "WARNING: pip reported dependency conflicts (see above)"
+
+	# --------------------------------------------------------------------------
+	# Separate conda env for structure preparation (MDAnalysis).
+	# Kept out of the main env so MDAnalysis and its dependency tree can never
+	# perturb the pinned torch / mdtraj / numpy stack that SAM2 and ESM rely on.
+	# run_pipeline.py calls it via --prep_python.
+	# --------------------------------------------------------------------------
+	/opt/conda/bin/conda create -y -n prep -c conda-forge --override-channels \
+		python=3.12 numpy=1.26.4 mdanalysis=2.7.0
+
+	# === STAGE 9 ===
+	# fpocket for cryptic-pocket volume, isolated in its own env for the same
+	# reason as the prep env: resolving it against conda-forge in the main env
+	# could move numpy out from under the pinned torch / mdtraj / SAM2 stack.
+	# It is a standalone binary invoked by subprocess, so the env it lives in
+	# is irrelevant to the Python that calls it.
+	/opt/conda/bin/conda create -y -n analysis -c conda-forge --override-channels \
+		fpocket
+	# === END STAGE 9 ===
+	/opt/conda/bin/conda clean -y --all
+
+	# --------------------------------------------------------------------------
+	# Make the baked payload readable by ANY uid.
+	# %files preserves the source permissions, and sam2_weights arrives as
+	# 0750/0640. That reads fine for the user who built the image and is denied
+	# for everyone else -- which would make this .sif unusable when shared.
+	# --------------------------------------------------------------------------
+	chmod -R a+rX /opt/pipeline /opt/models /opt/sam2_weights /opt/sam2 /opt/conda
+
+	# Scratch cache dir for HuggingFace; never written to in practice because the
+	# weights load from local paths and the offline flags are set below.
+	mkdir -p /tmp/hf_cache && chmod 1777 /tmp/hf_cache
+
+%environment
+	export PATH=/opt/conda/bin:$PATH
+	export ESM_MODEL=/opt/models/esm1v_t33_650M_UR90S_1.pt
+	export PROT_T5_MODEL=/opt/models/prot_t5_xl_uniref50_full_v2
+	export MODINSTALL10v8=/opt/conda/lib/modeller-10.8
+	export SAM_WEIGHTS_PATH=/opt/sam2_weights
+	export PREP_PYTHON=/opt/conda/envs/prep/bin/python3
+	# === STAGE 9 ===
+	export FPOCKET_BIN=/opt/conda/envs/analysis/bin/fpocket
+	# Fail loudly on a missing local weight file instead of silently reaching
+	# for the HuggingFace Hub.
+	export HF_HUB_OFFLINE=1
+	export TRANSFORMERS_OFFLINE=1
+	export HF_HOME=/tmp/hf_cache
+
+%test
+	# Without this a failing check below would print and still exit 0.
+	set -e
+	echo "--- python packages ---"
+	/opt/conda/bin/python3 -c "
+import importlib, sys
+mods = ['torch','esm','Bio','numpy','pandas','scipy','mdtraj','diffusers','tree','transformers','datasets','sentencepiece','peft','huggingface_hub','gradio_client','sam','sam.scripts.generate_ensemble']
+bad = []
+for m in mods:
+    try:
+        mod = importlib.import_module(m)
+        print('  OK      %-18s %s' % (m, getattr(mod, '__version__', '')))
+    except Exception as e:
+        print('  MISSING %-18s (%s)' % (m, type(e).__name__)); bad.append(m)
+sys.exit(1 if bad else 0)
+"
+	echo "--- MODELLER install ---"
+	# Not an "import modeller" check: that would validate the licence key, which
+	# is only supplied at run time. Verify the install and the config patch.
+	test -d /opt/conda/lib/modeller-10.8 && echo "  OK      /opt/conda/lib/modeller-10.8"
+	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py \
+		&& echo "  OK      config.py reads the licence key from the environment"
+
+	echo "--- SAM2 patch ---"
+	test -f /opt/sam2/src/sam/scripts/generate_ensemble.py
+	! grep -q '_LOGGER\.infox' /opt/sam2/src/sam/scripts/generate_ensemble.py
+	echo "  OK      generate_ensemble.py present and infox typo patched"
+
+	echo "--- structure-preparation env (isolated from the main env) ---"
+	test -x /opt/conda/envs/prep/bin/python3
+	/opt/conda/envs/prep/bin/python3 -c "
+import MDAnalysis, numpy, sys
+print('  OK      MDAnalysis        %s' % MDAnalysis.__version__)
+print('  OK      numpy (prep env)  %s' % numpy.__version__)
+"
+	# The whole point of the separate env: MDAnalysis must not have perturbed
+	# the pinned numpy that torch / mdtraj / SAM2 depend on in the main env.
+	/opt/conda/bin/python3 -c "
+import numpy, sys
+assert numpy.__version__ == '1.26.4', 'main env numpy drifted to ' + numpy.__version__
+print('  OK      numpy (main env)  %s  (unperturbed)' % numpy.__version__)
+"
+	/opt/conda/envs/prep/bin/python3 /opt/pipeline/clean_structure.py --help > /dev/null
+	echo "  OK      clean_structure.py runs in the prep env"
+	/opt/conda/bin/python3 /opt/pipeline/make_report.py --help > /dev/null
+	echo "  OK      make_report.py runs in the main env"
+
+	# === STAGE 6 ===
+	echo "--- ensemble clustering (Stage 6) ---"
+	# Clustering runs in the prep env: MDAnalysis lives there, and scipy
+	# comes with it. Keeping it out of the main env protects the pinned
+	# numpy / torch / SAM2 stack.
+	/opt/conda/envs/prep/bin/python3 -c "import MDAnalysis, scipy.cluster.vq, numpy; print('  OK      MDAnalysis + scipy.cluster in prep env')"
+	test -r /opt/pipeline/asam_cluster_analysis.py
+	echo "  OK      asam_cluster_analysis.py present"
+
+	# === STAGE 9 ===
+	echo "--- cryptic pocket analysis (Stage 9) ---"
+	test -x /opt/conda/envs/analysis/bin/fpocket
+	echo "  OK      fpocket binary present"
+	# Record the version. -P (guided detection) is advertised by 4.0 but only
+	# implemented from 4.2; Stage 9 detects this at runtime and falls back to
+	# unguided detection, but the version belongs in the build log so the
+	# behaviour of any given image is traceable.
+	echo "  INFO    fpocket $(/opt/conda/envs/analysis/bin/fpocket 2>&1 | grep -o 'fpocket [0-9.]*' | head -1)"
+	/opt/conda/envs/analysis/bin/fpocket 2>&1 | head -1 > /dev/null
+	/opt/conda/bin/python3 /opt/pipeline/cryptic_pocket_analysis.py --help > /dev/null
+	echo "  OK      cryptic_pocket_analysis.py runs in the main env"
+	/opt/conda/bin/python3 -c "import matplotlib; print('  OK      matplotlib', matplotlib.__version__)"
+	# === END STAGE 9 ===
+
+	echo "--- baked payload present and readable by uid $(id -u) ---"
+	/opt/conda/bin/python3 -c "
+import sys
+paths = [
+  '/opt/pipeline/run_pipeline.py',
+  '/opt/pipeline/predict_cryptic_local.py',
+  '/opt/pipeline/cryptobank_model_loader.py',
+  '/opt/pipeline/esm_scanner.py',
+  '/opt/pipeline/modeller_mutate.py',
+  '/opt/pipeline/clean_structure.py',
+  '/opt/pipeline/make_report.py',
+  '/opt/pipeline/asam_cluster_analysis.py',
+  '/opt/pipeline/cryptic_pocket_analysis.py',
+  '/opt/models/esm1v_t33_650M_UR90S_1.pt',
+  '/opt/models/prot_t5_xl_uniref50_full_v2/cpt.pth',
+  '/opt/models/prot_t5_xl_uniref50_full_v2/model.safetensors',
+  '/opt/models/prot_t5_xl_uniref50_full_v2/spiece.model',
+  '/opt/sam2_weights/weights/mdcath_1.0/nn.gen.pt',
+  '/opt/sam2_weights/weights/mdcath_1.0/nn.enc.pt',
+  '/opt/sam2_weights/weights/mdcath_1.0/nn.dec.pt',
+  '/opt/sam2_weights/weights/mdcath_1.0/enc_std_scaler.pt',
+]
+bad = []
+for p in paths:
+    try:
+        with open(p, 'rb') as fp:
+            fp.read(1)
+        print('  OK      ' + p)
+    except Exception as e:
+        print('  FAIL    %s (%s)' % (p, type(e).__name__)); bad.append(p)
+sys.exit(1 if bad else 0)
+"
+	echo "ALL CHECKS PASSED"
+
+%labels
+	Name CryptiScan-local
+	Version 1.0
+	Mode local-offline
+	Description Cryptic-pocket scan with local ProtT5 inference, ESM-1v scoring, MODELLER mutagenesis, aSAM ensembles and fpocket volume quantification
+
+%help
+	CryptiScan - LOCAL / OFFLINE image.
+
+	Cryptic-residue prediction runs on the ProtT5 weights baked into this image,
+	so no HuggingFace Space is contacted. Note that stage 2 still downloads the
+	target structure from files.rcsb.org unless you point the launcher at a local
+	.pdb file.
+
+	Run it with the launcher, which holds the editable configuration block:
+
+	    bash launch_pipeline_local.sh
+
+	Edit PDB / CHAIN / TOP / MODE / MODELLER_KEY at the top of that script. The
+	launcher deliberately passes no --bind flags; everything is inside the image.
+
+	Baked-in paths:
+	    /opt/pipeline/                                driver scripts
+	    /opt/models/esm1v_t33_650M_UR90S_1.pt         ESM-1v checkpoint
+	    /opt/models/prot_t5_xl_uniref50_full_v2/      ProtT5 + classifier head
+	    /opt/sam2_weights/weights/mdcath_1.0/         SAM2 weights
+	    /opt/conda/bin/python3                        interpreter
+
+	Verify the image with:  apptainer test pipeline_local.sif
