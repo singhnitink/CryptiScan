@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""
+Builds the human-readable run report for a CryptiScan job.
+
+Reads the structured outputs the pipeline already writes -- <PDB>_manifest.json,
+<PDB>_<chain>_cryptic.json, <pdb>_esm_results.json and <pdb>_prep.json -- rather
+than scraping stderr, so nothing depends on log formatting.
+
+Writes <jobname>_report.txt plus the wild-type and mutant sequences as FASTA.
+
+Deliberately dependency-free (standard library only) so it runs in either conda
+env, or on the host. mdtraj is used only if present, to count ensemble frames.
+
+Usage:
+    python3 make_report.py --workdir <run dir> [--jobname NAME] [--container FILE]
+"""
+
+import argparse
+import datetime as _dt
+import json
+import re
+import sys
+from pathlib import Path
+
+THREE_TO_ONE = {
+    'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+    'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+    'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+    'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
+}
+THREE_OF = {v: k for k, v in THREE_TO_ONE.items()}
+
+SKIP_LABELS = {
+    "wild type is already in the selection set": "skipped, wt already charged/polar",
+    "no candidate available in the selection set": "skipped, no candidate in set",
+    "no ESM score returned for this residue": "skipped, no ESM score",
+}
+
+W = 80
+def rule(c="-"):
+    return c * W
+
+def head(title):
+    return f"{rule()}\n {title}\n{rule()}"
+
+
+def read_json(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except Exception:
+        return None
+
+
+def chain_sequence(pdb_path, chain=None):
+    """(sequence, [resid...]) from CA atoms, in file order. Pure text parsing."""
+    seq, ids = [], []
+    try:
+        lines = Path(pdb_path).read_text().splitlines()
+    except Exception:
+        return "", []
+    for line in lines:
+        if not line.startswith("ATOM") or len(line) < 27:
+            continue
+        if line[12:16].strip() != "CA":
+            continue
+        if chain and line[21] != chain:
+            continue
+        resname = line[17:20].strip()
+        seq.append(THREE_TO_ONE.get(resname, "X"))
+        try:
+            ids.append(int(line[22:26]))
+        except ValueError:
+            ids.append(None)
+    return "".join(seq), ids
+
+
+def wrap_fasta(seq, width=60):
+    return "\n".join(seq[i:i+width] for i in range(0, len(seq), width))
+
+
+def ensemble_frames(workdir):
+    dcd = workdir / "ensemble_output.traj.dcd"
+    top = workdir / "ensemble_output.top.pdb"
+    if not dcd.exists():
+        return None
+    try:
+        import mdtraj
+        return mdtraj.load(str(dcd), top=str(top)).n_frames
+    except Exception:
+        # DCD header: frame count is a 4-byte int at offset 8
+        try:
+            import struct
+            with open(dcd, "rb") as fp:
+                fp.seek(8)
+                return struct.unpack("<i", fp.read(4))[0]
+        except Exception:
+            return None
+
+
+def cluster_meta(workdir):
+    # asam_cluster_analysis.py writes KEY=VALUE lines meant to be sourced by bash
+    path = workdir / "ensemble_clusters" / "cluster_meta.sh"
+    if not path.exists():
+        return None
+    meta = {}
+    for line in path.read_text().splitlines():
+        key, _, value = line.partition("=")
+        meta[key.strip()] = value.strip()
+    return meta
+
+
+def build(workdir, jobname, container):
+    workdir = Path(workdir)
+    out = []
+
+    manifest_files = sorted(workdir.glob("*_manifest.json"))
+    manifest = read_json(manifest_files[0]) if manifest_files else {}
+    if not manifest:
+        print(f"ERROR: no *_manifest.json in {workdir}", file=sys.stderr)
+        sys.exit(1)
+
+    pdb_id = manifest.get("pdb", "?")
+    chain = manifest.get("chain", "?")
+    base = pdb_id.lower()
+
+    cryptic = read_json(workdir / f"{pdb_id}_{chain}_cryptic.json") or {}
+    esm = read_json(workdir / f"{base}_esm_results.json") or []
+    prep = read_json(workdir / f"{base}_prep.json") or {}
+
+    # timestamp from the <jobname>_<YYYYmmdd>_<HHMMSS> directory name
+    stamp = "unknown"
+    m = re.search(r"_(\d{8})_(\d{6})$", workdir.name)
+    if m:
+        try:
+            stamp = _dt.datetime.strptime(m.group(1) + m.group(2),
+                                          "%Y%m%d%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+    if not jobname:
+        jobname = re.sub(r"_\d{8}_\d{6}$", "", workdir.name)
+
+    engine = cryptic.get("source", "unknown")
+    mode_label = "local (ProtT5, offline)" if "Local" in engine else \
+                 "web (CryptoBank HF Space)" if "hf.space" in engine else "unknown"
+
+    # ---------------------------------------------------------------- header
+    out.append(rule("="))
+    out.append(" CryptiScan - Run Report")
+    out.append(rule("="))
+    out.append(f" Job name       : {jobname}")
+    out.append(f" Run directory  : {workdir.name}")
+    out.append(f" Run started    : {stamp}")
+    out.append(f" Report written : {_dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    out.append(f" Pipeline       : {mode_label}")
+    if container:
+        out.append(f" Container      : {container}")
+    out.append("")
+
+    # ------------------------------------------------------- target structure
+    out.append(head("1. TARGET STRUCTURE"))
+    out.append(f" PDB ID                : {pdb_id}")
+    out.append(f" Selected chain        : {chain}")
+    out.append(f" Source                : https://files.rcsb.org/download/{pdb_id.upper()}.pdb")
+    if prep:
+        out.append(f" Chains in entry       : {', '.join(prep.get('chains', [])) or 'n/a'}")
+        out.append(f" Protein residues      : {prep.get('n_protein_residues', '?')} (all chains)")
+        out.append(f" Waters dropped        : {prep.get('n_waters_dropped', '?')}")
+    wt_seq, wt_ids = chain_sequence(workdir / manifest.get("source_structure", f"{base}.pdb"), chain)
+    out.append(f" Selected chain length : {len(wt_seq)} residues")
+    out.append(f" Cleaned               : {manifest.get('cleaned')}")
+    out.append("")
+    ligs = prep.get("ligands", []) if prep else []
+    out.append(f" Ligands extracted     : {len(ligs)}")
+    for lg in ligs:
+        out.append(f"     {lg['resname']:<4} chain {lg.get('chain') or '?':<2} "
+                   f"resid {lg['resid']:<5} {lg['n_atoms']:>3} atoms  -> {lg['file']}")
+    out.append("")
+
+    # ---------------------------------------------------- cryptic prediction
+    out.append(head("2. CRYPTIC POCKET PREDICTION"))
+    out.append(f" Engine       : {engine}")
+    out.append(f" Score type   : {manifest.get('score_type', '?')}")
+    # The residues the run examined, in rank order: the requested number of
+    # mutable residues plus any skipped on the way down the ranking.
+    examined = manifest.get("cryptic_residues") or cryptic.get("top_residues", [])
+    n_req = manifest.get("n_mutations_requested")
+    n_ranked = manifest.get("n_residues_ranked") or cryptic.get("n_total_residues", "?")
+    out.append(f" Residues     : ranks 1-{len(examined)} of {n_ranked} examined")
+    if n_req is not None:
+        out.append(f" Mutations    : {n_req} requested")
+    out.append("")
+    out.append("   Rank  Residue      Crypticity  Status")
+    out.append("   ----  -----------  ----------  ------------------------------")
+    for i, r in enumerate(examined, 1):
+        res = f"{r['resname_3letter']}{r['resid']}"
+        sc = r.get("score")
+        sc_txt = f"{sc:.4f}" if isinstance(sc, (int, float)) else str(sc)
+        if r.get("target_mut"):
+            status = f"mutate -> {r['target_mut']}"
+        elif "target_mut" in r:
+            status = SKIP_LABELS.get(r.get("skip_reason"), "skipped")
+        else:
+            status = ""
+        out.append(f"   {r.get('rank', i):>4}  {res:<11}  {sc_txt:<10}  {status}")
+    if any(r.get("skip_mutation") for r in examined):
+        out.append("")
+        out.append(" A skipped residue is replaced by the next one down the ranking, so")
+        out.append(" the requested number of residues is still mutated.")
+    out.append("")
+
+    # ------------------------------------------------------------- ESM-Scan
+    out.append(head("3. ESM-SCAN MUTATION SELECTION"))
+    out.append(" Score = logP(mutant) - logP(wild-type) from ESM-1v; higher is better.")
+    out.append(" ESM chooses WHICH amino acid to place at each cryptic position;")
+    out.append(" the positions themselves come from the cryptic prediction above.")
+    out.append("")
+
+    mset = manifest.get("mutation_set")
+    if mset:
+        out.append(f" Mutation set : {mset}")
+        out.append("")
+        out.append(" Substitutions are restricted to charged/polar residues on purpose.")
+        out.append(" ESM-1v scores evolutionary fitness, so left unrestricted it favours")
+        out.append(" whatever preserves the fold -- for a buried hydrophobic residue that")
+        out.append(" means another hydrophobic one (ILE -> VAL), which would not open the")
+        out.append(" pocket. Burying a charge or polar group is destabilising, which is")
+        out.append(" what drives opening, so these scores are expected to be negative.")
+        out.append("")
+
+    # Score matrix: every candidate in the selection set, for every residue --
+    # including residues that were skipped.
+    cols = []
+    for e in esm:
+        for a in e.get("selection_set", []):
+            three = THREE_OF.get(a, a)
+            if three not in cols:
+                cols.append(three)
+    cols = sorted(cols)
+
+    # A restricted set fits as a matrix; the unrestricted 19 would run ~170
+    # columns wide, so fall back to the compact listing there.
+    if cols and len(cols) <= 12:
+        hdr = "   " + f"{'Residue':<10}" + "".join(f"{c:>8}" for c in cols) + "   chosen"
+        out.append(hdr)
+        out.append("   " + "-" * (len(hdr) - 3))
+        for e in esm:
+            res = f"{e.get('wt_aa3','?')}{e.get('resid','?')}"
+            scores = {c["mut_aa3"]: c["esm_score"]
+                      for c in e.get("all_candidates_ranked", e.get("candidates_ranked", []))}
+            cells = "".join(
+                f"{scores[c]:>8.2f}" if c in scores else f"{'-':>8}" for c in cols)
+            if e.get("skip_mutation"):
+                chosen = "SKIPPED (wt already in set)"
+            else:
+                chosen = f"{e.get('best_mut_aa3','?')} ({e.get('best_score', 0):+.2f})"
+            out.append(f"   {res:<10}{cells}   {chosen}")
+        out.append("")
+        out.append("   '-' marks the wild-type residue, which is never a candidate.")
+    else:
+        # Unrestricted run: fall back to the original compact listing.
+        out.append("   Residue      Chosen    Score     Next best alternatives")
+        out.append("   -----------  --------  --------  ------------------------------------")
+        for e in esm:
+            res = f"{e.get('wt_aa3','?')}{e.get('resid','?')}"
+            alts = "; ".join(f"{c['mut_aa3']}({c['esm_score']:+.2f})"
+                             for c in e.get("candidates_ranked", [])[1:4])
+            # Skipped residues carry None for both fields.
+            chosen = e.get("best_mut_aa3") or "SKIPPED"
+            sc = e.get("best_score")
+            sc_txt = f"{sc:>+8.4f}" if isinstance(sc, (int, float)) else f"{'-':>8}"
+            out.append(f"   {res:<11}  {chosen:<8}  {sc_txt}  {alts}")
+    out.append("")
+    out.append(f" Full ranking of all 19 substitutions per site: {base}_esm_summary.csv")
+    out.append("")
+
+    # ----------------------------------------------------------- mutagenesis
+    out.append(head("4. IN SILICO MUTAGENESIS (MODELLER)"))
+    mode = manifest.get("mode", "?")
+    n_scored = manifest.get("n_residues_scored")
+    n_mut = manifest.get("n_residues_mutated")
+    n_skip = manifest.get("n_residues_skipped")
+    if n_scored is not None:
+        if n_req is not None:
+            out.append(f" Mutations requested : {n_req}")
+        out.append(f" Residues examined   : {n_scored}  (crypticity ranks 1-{n_scored})")
+        out.append(f" Residues mutated    : {n_mut}")
+        if n_skip:
+            out.append(f" Residues skipped    : {n_skip}  "
+                       f"(wild type already charged/polar -- see section 2)")
+        if n_req is not None and n_mut is not None and n_mut < n_req:
+            out.append(f" WARNING: only {n_mut} of the {n_req} requested residues could be")
+            out.append(f"          mutated; no other residue in chain {chain} qualifies.")
+        out.append("")
+    out.append(f" Mode : {mode}")
+    if mode == "combined":
+        out.append("        all mutations applied sequentially into ONE structure;")
+        out.append("        each mutation is relaxed in the presence of the previous ones.")
+    else:
+        out.append("        each mutation applied separately to the wild-type structure.")
+    out.append("")
+    mutants = manifest.get("mutants", [])
+    applied = []
+    for mu in mutants:
+        if mu.get("residue") == "combined":
+            applied = mu.get("mutations", [])
+            out.append(" Applied in this order:")
+            for i, mm in enumerate(applied, 1):
+                out.append(f"   {i}. {mm['wt']}{mm['resid']} -> {mm['mut']}"
+                           f"   (ESM {mm.get('esm_score', 0):+.4f})")
+            out.append("")
+            out.append(f" Output structure : {mu.get('pdb_file')}")
+        else:
+            out.append(f"   {mu.get('residue')} -> {mu.get('mut')}   ->  {mu.get('pdb_file')}")
+            applied.append({"wt": mu.get("wt"), "resid": mu.get("resid"), "mut": mu.get("mut")})
+    out.append("")
+
+    # -------------------------------------------------------------- sequences
+    out.append(head("5. SEQUENCES"))
+    mut_pdb = None
+    for mu in mutants:
+        if mu.get("pdb_file"):
+            mut_pdb = workdir / mu["pdb_file"]
+    mut_seq, mut_ids = chain_sequence(mut_pdb, chain) if mut_pdb else ("", [])
+
+    out.append(f" Wild-type (chain {chain}, {len(wt_seq)} aa)")
+    out.append("")
+    out.append(f" >{pdb_id}_{chain}|wild-type|{len(wt_seq)}aa")
+    out.append(wrap_fasta(wt_seq))
+    out.append("")
+    if mut_seq:
+        out.append(f" Mutant ({len(applied)} mutations, {len(mut_seq)} aa)")
+        out.append("")
+        out.append(f" >{pdb_id}_{chain}|mutant|{len(applied)}mut|{len(mut_seq)}aa")
+        out.append(wrap_fasta(mut_seq))
+        out.append("")
+        if len(wt_seq) == len(mut_seq):
+            diffs = [(i, a, b) for i, (a, b) in enumerate(zip(wt_seq, mut_seq)) if a != b]
+            out.append(f" Differences vs wild-type : {len(diffs)}")
+            for i, a, b in diffs:
+                rid = wt_ids[i] if i < len(wt_ids) else "?"
+                out.append(f"   seq position {i+1:<5} (PDB resid {rid})  {a} -> {b}")
+            if len(diffs) != len(applied):
+                out.append(f"   NOTE: {len(applied)} mutations were requested but "
+                           f"{len(diffs)} sequence differences are present.")
+        else:
+            out.append(f" NOTE: length mismatch, wild-type {len(wt_seq)} vs mutant {len(mut_seq)};"
+                       " sequence diff skipped.")
+    else:
+        out.append(" Mutant sequence unavailable (no mutant structure found).")
+    out.append("")
+
+    # --------------------------------------------------------------- ensemble
+    out.append(head("6. ENSEMBLE GENERATION (aSAM / SAM2)"))
+    n = ensemble_frames(workdir)
+    if n is not None:
+        out.append(f" Frames generated : {n}")
+        out.append(f" Input structure  : {manifest.get('sam2_input')}")
+        out.append(" Files            : ensemble_output.top.pdb, ensemble_output.traj.dcd")
+        clusters = cluster_meta(workdir)
+        if clusters and clusters.get("ASAM_USED_CLUSTERING") == "true":
+            out.append(f" Clusters         : {clusters.get('ASAM_N_CLUSTERS_USED')} representative frames"
+                       " (PCA + k-means on CA coordinates)")
+            out.append(" Representatives  : ensemble_clusters/clustering/cluster_representatives.dcd")
+        elif clusters:
+            out.append(" Clusters         : skipped (too few frames to cluster)")
+        else:
+            out.append(" Clusters         : not run (clustering stage failed or was skipped)")
+        out.append("")
+        out.append(" NOTE: SAM2 renumbers residues from 0 and drops the C-terminal OXT")
+        out.append("       atom, so load the trajectory and the cluster representatives")
+        out.append("       with ensemble_output.top.pdb as the topology, not the input PDB.")
+    else:
+        out.append(" No ensemble found (SAM2 stage did not run or produced no output).")
+    out.append("")
+
+    # ---------------------------------------------------------------- files
+    out.append(head("7. FILES IN THIS ARCHIVE"))
+    for f in sorted(workdir.rglob("*")):
+        if f.is_file():
+            out.append(f"   {str(f.relative_to(workdir)):<44} {f.stat().st_size:>12,} B")
+    out.append("   (plus this report and the two .fasta files, written afterwards)")
+    out.append("")
+    out.append(rule("="))
+    out.append(" End of report")
+    out.append(rule("="))
+
+    return "\n".join(out) + "\n", (pdb_id, chain, wt_seq, mut_seq, len(applied), jobname)
+
+
+def main():
+    p = argparse.ArgumentParser(description="Build the CryptiScan run report")
+    p.add_argument("--workdir", required=True)
+    p.add_argument("--jobname", default=None)
+    p.add_argument("--container", default=None)
+    p.add_argument("--output", default=None,
+                   help="Report path (default <workdir>/<jobname>_report.txt)")
+    a = p.parse_args()
+
+    workdir = Path(a.workdir)
+    text, (pdb_id, chain, wt_seq, mut_seq, n_mut, jobname) = build(
+        workdir, a.jobname, a.container)
+
+    # Named after the job, so reports stay identifiable once they are pulled
+    # out of their run directories and collected together.
+    out = Path(a.output) if a.output else workdir / f"{jobname}_report.txt"
+    out.write_text(text)
+    print(f"[REPORT] wrote {out}", file=sys.stderr)
+
+    if wt_seq:
+        f = workdir / f"{pdb_id}_{chain}_wildtype.fasta"
+        f.write_text(f">{pdb_id}_{chain}|wild-type|{len(wt_seq)}aa\n{wrap_fasta(wt_seq)}\n")
+        print(f"[REPORT] wrote {f}", file=sys.stderr)
+    if mut_seq:
+        f = workdir / f"{pdb_id}_{chain}_mutant.fasta"
+        f.write_text(f">{pdb_id}_{chain}|mutant|{n_mut}mut|{len(mut_seq)}aa\n{wrap_fasta(mut_seq)}\n")
+        print(f"[REPORT] wrote {f}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
