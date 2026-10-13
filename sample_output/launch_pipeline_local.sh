@@ -35,7 +35,7 @@ cd "$SCRIPT_DIR"
 # ==============================================================================
 # 1. USER CONFIGURATION  --  this is the only block you need to edit
 # ==============================================================================
-PDB="9YBR"                     # PDB accession code, or a path to a local .pdb
+PDB="2WGB"                     # PDB accession code, or a path to a local .pdb
 CHAIN="A"                      # chain to analyse
 
 # MODELLER needs a free academic key: https://salilab.org/modeller/registration.html
