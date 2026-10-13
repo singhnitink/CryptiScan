@@ -3,24 +3,17 @@
 End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
 
 ```mermaid
-flowchart TD
-    subgraph row1 [" "]
-        direction LR
-        IN(["PDB ID or .pdb"]) --> S1["1 · Fetch & Cleanup<br/><i>MDAnalysis</i>"] --> S2["2 · Chain Selection<br/><i>MDAnalysis</i>"] --> S3["3 · Cryptic Prediction<br/><i>ProtT5</i>"]
-    end
-
-    subgraph row2 [" "]
-        direction LR
-        S4["4 · ESM-Scan<br/><i>ESM-1v</i>"] --> S5["5 · Mutagenesis<br/><i>MODELLER</i>"] --> S5b["5b · Validation<br/><i>MDAnalysis</i>"]
-    end
-
-    subgraph row3 [" "]
-        direction LR
-        S6["6 · Ensemble Gen.<br/><i>SAM2 · GPU</i>"] --> S6b["6b · Clustering<br/><i>PCA + k-means</i>"] --> S7["7 · Report & FASTA"] --> S8(["8 · Archive .zip"])
-    end
-
-    S3 --> S4
-    S5b --> S6
+graph LR
+    A([PDB / .pdb]) --> B[Fetch + Cleanup]
+    B --> C[Chain Selection]
+    C --> D[Cryptic Prediction]
+    D --> E[ESM-Scan]
+    E --> F[MODELLER Mutagenesis]
+    F --> G[SAM2 Validation]
+    G --> H[Ensemble Generation]
+    H --> I[Clustering]
+    I --> J[Report + FASTA]
+    J --> K([Archive .zip])
 ```
 
 
