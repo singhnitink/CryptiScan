@@ -3,17 +3,16 @@
 End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
 
 ```mermaid
-graph LR
-    A([PDB / .pdb]) --> B[Fetch + Cleanup]
-    B --> C[Chain Selection]
-    C --> D[Cryptic Prediction]
-    D --> E[ESM-Scan]
-    E --> F[MODELLER Mutagenesis]
-    F --> G[SAM2 Validation]
-    G --> H[Ensemble Generation]
-    H --> I[Clustering]
-    I --> J[Report + FASTA]
-    J --> K([Archive .zip])
+flowchart TB
+    subgraph row1 [" "]
+        direction LR
+        A([PDB / .pdb]) --> B[Fetch + Cleanup] --> C[Chain Selection] --> D[Cryptic Prediction] --> E[ESM-Scan] --> F[MODELLER Mutagenesis]
+    end
+    subgraph row2 [" "]
+        direction LR
+        G[SAM2 Validation] --> H[Ensemble Generation] --> I[Clustering] --> J[Report + FASTA] --> K([Archive .zip])
+    end
+    row1 --> row2
 ```
 
 
@@ -45,7 +44,6 @@ PCA_DIM=10                     # Number of PCA components for clustering
 JOBNAME="${JOBNAME:-1jwp}"     # Output folder prefix
 MODELLER_KEY="$MODELLER_KEY"  # Sali Lab MODELLER license key
 ```
-
 Parameters can also be passed as environment variables:
 
 ```bash
