@@ -2,68 +2,37 @@
 
 End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
 
+```mermaid
+flowchart TD
+    INPUT(["PDB Code or Local .pdb File"]) --> S1
+
+    subgraph PREP ["Structure Preparation"]
+        S1["1. Fetch & Cleanup (MDAnalysis)<br/>• Extracts full protein (all chains)<br/>• Isolates ligands to separate files<br/>• Drops waters & collapses alternate locations"]
+        S2["2. Chain Selection (MDAnalysis)<br/>• Isolates specified target CHAIN<br/>• Validates standard residues and CA presence"]
+        S1 --> S2
+    end
+
+    subgraph MUT ["Mutagenesis & Design"]
+        S3["3. Cryptic Pocket Prediction (ProtT5)<br/>• Local inference of per-residue crypticity"]
+        S4["4. ESM-Scan (ESM-1v)<br/>• Scores all 19 amino acid substitutions<br/>• Selects top charged/polar swaps to open pocket"]
+        S5["5. In Silico Mutagenesis (MODELLER)<br/>• Introduces mutations & relaxes sidechains"]
+        S5b["5b. SAM2 Validation (MDAnalysis)<br/>• Verifies structure topology and formatting"]
+        S2 --> S3 --> S4 --> S5 --> S5b
+    end
+
+    subgraph SAM ["Conformational Sampling"]
+        S6["6. Ensemble Generation (SAM2 / aSAM)<br/>• GPU-accelerated conformational sampling"]
+        S6b["6b. Ensemble Clustering (MDAnalysis + SciPy)<br/>• PCA + k-means clustering on CA coordinates<br/>• Extracts representative cluster frames"]
+        S5b --> S6 --> S6b
+    end
+
+    subgraph PACK ["Reporting & Packaging"]
+        S7["7. Report & Sequences<br/>• Generates summary report & FASTA files"]
+        S8(["8. Compressed Output Archive<br/>jobname_timestamp.zip"])
+        S6b --> S7 --> S8
+    end
 ```
-                      PDB ID  or  local .pdb
-                                  │
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 1. Fetch from RCSB + Cleanup        [MDAnalysis]              │
-  │    <pdb>_raw.pdb       entry as downloaded                    │
-  │    <pdb>_protein.pdb   full protein, all chains               │
-  │    <pdb>_ligands/      one file per ligand                    │
-  │    waters dropped, alternate locations collapsed              │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 2. Chain Selection                  [MDAnalysis]              │
-  │    <pdb>.pdb   chain specified by CHAIN in the launcher.      │
-  │    Standard residues and CA atoms verified. Downstream stages │
-  │    operate on this single chain.                              │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 3. Cryptic Residue Prediction       [ProtT5]                  │
-  │    Local ProtT5 inference -> <PDB>_<chain>_cryptic.json       │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 4. ESM-Scan                         [ESM-1v]                  │
-  │    Scores substitutions and selects top charged/polar swaps   │
-  │    to promote pocket opening.                                 │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 5. In Silico Mutagenesis            [MODELLER]                │
-  │    Introduces mutations and relaxes sidechains                │
-  │    -> <pdb>_top<N>_esm_mutant.pdb                             │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 5b. Validate for SAM2               [MDAnalysis]              │
-  │     Validates structure format -> sam2_input.pdb              │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 6. Ensemble Generation             [SAM2 / aSAM]              │
-  │    GPU conformational sampling -> ensemble_output.*           │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 6b. Ensemble Clustering            [MDAnalysis + scipy]       │
-  │     PCA + k-means clustering on CA atoms                      │
-  │     -> ensemble_clusters/                                     │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 7. Report and Sequences                                       │
-  │    <jobname>_report.txt, <PDB>_<chain>_wildtype.fasta,        │
-  │    <PDB>_<chain>_mutant.fasta                                 │
-  └───────────────────────────────┬───────────────────────────────┘
-                                  ▼
-  ┌───────────────────────────────────────────────────────────────┐
-  │ 8. Archive  ->  <jobname>_<timestamp>.zip                     │
-  └───────────────────────────────────────────────────────────────┘
-```
+
 
 The pipeline runs fully locally inside an Apptainer container (`pipeline_local.sif`). All scripts, dependencies, and model weights are packaged directly in the image. Internet access is only required if downloading structures from RCSB; providing a local `.pdb` file path allows fully offline execution.
 
