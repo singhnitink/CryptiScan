@@ -1,6 +1,6 @@
 # CryptiScan Pipeline
 
-This directory contains the unified, end-to-end CryptiScan workflow.
+End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
 
 ```
                       PDB ID  or  local .pdb
@@ -9,55 +9,53 @@ This directory contains the unified, end-to-end CryptiScan workflow.
   ┌───────────────────────────────────────────────────────────────┐
   │ 1. Fetch from RCSB + Cleanup        [MDAnalysis]              │
   │    <pdb>_raw.pdb       entry as downloaded                    │
-  │    <pdb>_protein.pdb   full protein, ALL chains               │
-  │    <pdb>_ligands/      one file per ligand, any resname       │
+  │    <pdb>_protein.pdb   full protein, all chains               │
+  │    <pdb>_ligands/      one file per ligand                    │
   │    waters dropped, alternate locations collapsed              │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ 2. Chain Selection                  [MDAnalysis]              │
-  │    <pdb>.pdb   the chain set by CHAIN in the launcher.        │
-  │    Standard residues + CA verified. Every stage below         │
-  │    operates on this single chain.                             │
+  │    <pdb>.pdb   chain specified by CHAIN in the launcher.      │
+  │    Standard residues and CA atoms verified. Downstream stages │
+  │    operate on this single chain.                              │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 3. Cryptic Residue Prediction                                 │
-  │    Local ProtT5 (offline)  or  CryptoBank Space (web)         │
-  │    -> <PDB>_<chain>_cryptic.json                              │
+  │ 3. Cryptic Residue Prediction       [ProtT5]                  │
+  │    Local ProtT5 inference -> <PDB>_<chain>_cryptic.json       │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 4. ESM-Scan                             [ESM-1v]              │
-  │    Scores every substitution, then picks the best CHARGED     │
-  │    or POLAR one. Conservative nonpolar swaps (ILE->VAL)       │
-  │    would leave the pocket shut.                               │
+  │ 4. ESM-Scan                         [ESM-1v]                  │
+  │    Scores substitutions and selects top charged/polar swaps   │
+  │    to promote pocket opening.                                 │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 5. In Silico Mutagenesis              [MODELLER]              │
-  │    Mutates and relaxes sidechains                             │
+  │ 5. In Silico Mutagenesis            [MODELLER]                │
+  │    Introduces mutations and relaxes sidechains                │
   │    -> <pdb>_top<N>_esm_mutant.pdb                             │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ 5b. Validate for SAM2               [MDAnalysis]              │
-  │     -> sam2_input.pdb                                         │
+  │     Validates structure format -> sam2_input.pdb              │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 6. Ensemble Generation             [aSAM / SAM2]              │
+  │ 6. Ensemble Generation             [SAM2 / aSAM]              │
   │    GPU conformational sampling -> ensemble_output.*           │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 6b. Ensemble Clustering         [MDAnalysis + scipy]          │
-  │     PCA + k-means on CA, one frame per cluster                │
+  │ 6b. Ensemble Clustering            [MDAnalysis + scipy]       │
+  │     PCA + k-means clustering on CA atoms                      │
   │     -> ensemble_clusters/                                     │
   └───────────────────────────────┬───────────────────────────────┘
                                   ▼
   ┌───────────────────────────────────────────────────────────────┐
-  │ 7. Report + Sequences                                         │
+  │ 7. Report and Sequences                                       │
   │    <jobname>_report.txt, <PDB>_<chain>_wildtype.fasta,        │
   │    <PDB>_<chain>_mutant.fasta                                 │
   └───────────────────────────────┬───────────────────────────────┘
@@ -67,292 +65,190 @@ This directory contains the unified, end-to-end CryptiScan workflow.
   └───────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Two Versions
-
-| | **Local Version** | **Web Version** |
-|---|---|---|
-| **Launcher script** | `launch_pipeline_local.sh` | `launch_pipeline_web.sh` |
-| **Apptainer def** | `pipeline_local.def` | `pipeline_web.def` |
-| **Container image** | `pipeline_local.sif` (~15 GB) | `pipeline_web.sif` (~10 GB) |
-| **Stage 1 engine** | Local ProtT5 (`predict_cryptic_local.py`) | CryptoBank HF Space (`scrape_cryptobank.py`) |
-| **Internet needed** | Only to fetch the structure from RCSB (see note) | Yes — stage 1 calls `thorbenf-cryptobank.hf.space` |
-| **Baked-in weights** | ESM-1v, ProtT5-XL + head, SAM2 | ESM-1v, SAM2 |
-
-> **Note on "offline".** The local version performs cryptic-pocket *inference*
-> locally, with no HuggingFace Space call. Stage 2 still downloads the target
-> structure from `files.rcsb.org`. To run with no network at all, set `PDB` in
-> the launcher to the path of a local `.pdb` file.
-
-Both versions are fully self-contained. **The launchers pass no `--bind` flags,
-by design** — every script and weight is read from inside the `.sif`. A bind
-mount would silently mask a stale image with host files that whoever you share
-the image with will not have. Please do not add them back.
+The pipeline runs fully locally inside an Apptainer container (`pipeline_local.sif`). All scripts, dependencies, and model weights are packaged directly in the image. Internet access is only required if downloading structures from RCSB; providing a local `.pdb` file path allows fully offline execution.
 
 ---
 
 ## How to Run
 
-Everything is driven by the bash launcher. Open it, edit the configuration block
-at the top, and run it.
+Configure parameters at the top of `launch_pipeline_local.sh` and run:
 
 ```bash
-# 1. Edit PDB, CHAIN, TOP, MODE and MODELLER_KEY at the top of the script
-# 2. Run:
-bash launch_pipeline_local.sh    # local version
-bash launch_pipeline_web.sh      # web version
+bash launch_pipeline_local.sh
 ```
 
-The configuration block looks like this:
+### Configuration Options
+
+Edit these variables near the top of `launch_pipeline_local.sh`:
 
 ```bash
-PDB="1JWP"                     # PDB accession code, or a path to a local .pdb
+PDB="1JWP"                     # PDB code or path to a local .pdb file
 CHAIN="A"                      # Target chain identifier
-TOP=5                          # Number of residues to mutate; a charged/polar wild type is
-                               # skipped and the next-ranked cryptic residue is used instead
-MODE="combined"                # "combined" = one structure; "independent" = N mutants
-STRATEGY="esm"                 # "esm" = pick substitutions with ESM-Scan
-MUTATION_SET="charged_polar"   # charged_polar | charged | polar | all | "ASP,GLU,..."
-N_CLUSTERS=10                  # Max clusters for the SAM2 ensemble
-PCA_DIM=10                     # PCA components used for clustering
-JOBNAME="${JOBNAME:-1jwp}"     # Names the output folder and zip
-MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"
+TOP=5                          # Number of cryptic residues to mutate
+MODE="combined"                # "combined" = one multi-mutant; "independent" = N separate mutants
+STRATEGY="esm"                 # Mutation strategy ("esm")
+MUTATION_SET="charged_polar"   # Candidate pool: charged_polar | charged | polar | all | "ASP,GLU,..."
+N_CLUSTERS=10                  # Number of clusters for SAM2 ensemble
+PCA_DIM=10                     # Number of PCA components for clustering
+JOBNAME="${JOBNAME:-1jwp}"     # Output folder prefix
+MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"  # Sali Lab MODELLER license key
 ```
 
-`JOBNAME` and `MODELLER_KEY` can also be set from the environment without
-editing the file:
+Parameters can also be passed as environment variables:
 
 ```bash
-JOBNAME=1lzt MODELLER_KEY=your_key_here bash launch_pipeline_local.sh
+JOBNAME=1lzt MODELLER_KEY="your_key" bash launch_pipeline_local.sh
 ```
 
-Before stage 1, the launcher verifies that the image contains and can read every
-file it needs. If the `.sif` is stale or was built from an older definition, it
-stops immediately and tells you to rebuild.
+Before running stage 1, the launcher validates that `pipeline_local.sif` exists, matches required dependencies, and has readable weights.
 
-### Output
+---
 
-Everything is packaged into a single timestamped archive:
+## Output Structure
+
+Results are packaged into `<jobname>_<timestamp>.zip`:
 
 ```
-<jobname>_<timestamp>.zip
-├── 1jwp_raw.pdb                     entry as downloaded from RCSB
-├── 1jwp_protein.pdb                 full protein, ALL chains
-├── 1jwp_ligands/PO4_A1.pdb          one file per ligand, whatever its resname
-├── 1jwp_prep.json                   what was kept, split out, and dropped
-├── 1jwp.pdb                         SELECTED CHAIN - used by every stage below
-├── 1JWP_A_cryptic.json              cryptic residue predictions
-├── 1jwp_esm_summary.csv             ESM score for every charged/polar option
-├── 1jwp_top5_esm_mutant.pdb         MODELLER mutant
-├── sam2_input.pdb                   mutant, validated for SAM2
-├── ensemble_output.*                SAM2 / aSAM conformational ensemble
+<jobname>_<timestamp>/
+├── 1jwp_raw.pdb                     Downloaded raw entry from RCSB
+├── 1jwp_protein.pdb                 Cleaned protein (all chains)
+├── 1jwp_ligands/PO4_A1.pdb          Extracted ligands (one file per residue)
+├── 1jwp_prep.json                   Summary of cleaned/dropped residues
+├── 1jwp.pdb                         Target chain used for all pipeline stages
+├── 1JWP_A_cryptic.json              Predicted cryptic residue positions and probabilities
+├── 1jwp_esm_summary.csv             ESM scores for tested substitutions
+├── 1jwp_top5_esm_mutant.pdb         Relaxed MODELLER mutant structure
+├── sam2_input.pdb                   Structure validated for SAM2
+├── ensemble_output.*                SAM2 conformational ensemble trajectory and topology
 ├── ensemble_clusters/
-│   ├── clustering/cluster_representatives.dcd   one frame per cluster
-│   ├── clustering/cluster_representatives.json  ensemble frame and size of each cluster
-│   └── cluster_meta.sh              frame and cluster counts
-├── 1JWP_manifest.json               run manifest
-├── 1jwp_local_report.txt            human-readable summary of the whole run
-├── 1JWP_A_wildtype.fasta            wild-type sequence of the selected chain
-└── 1JWP_A_mutant.fasta              mutant sequence
+│   ├── clustering/cluster_representatives.dcd   Representative frame per cluster
+│   ├── clustering/cluster_representatives.json  Cluster assignments and population counts
+│   └── cluster_meta.sh              Summary counts
+├── 1JWP_manifest.json               Run metadata and configuration snapshot
+├── 1jwp_local_report.txt            Plaintext summary of the run
+├── 1JWP_A_wildtype.fasta            Wild-type sequence of the target chain
+└── 1JWP_A_mutant.fasta              Mutated sequence
 ```
 
-**Stage 1 — cleanup.** MDAnalysis splits the raw entry: the full protein (all
-chains, the 20 standard residues) goes to `<pdb>_protein.pdb`, every
-non-protein non-water residue is written to its own file under
-`<pdb>_ligands/` regardless of residue name, and waters are dropped.
-Alternate locations are collapsed to one. Ligands are kept for your own
-analysis and are not fed downstream.
+### Key Pipeline Details
 
-**Stage 2 — chain selection.** `<pdb>.pdb` is reduced to the chain named by
-`CHAIN` in the launcher, and validated: standard residues only, every residue
-has a CA. Cryptic-residue prediction, ESM-Scan, MODELLER and SAM2 all run on
-this single chain. The full protein stays available in `<pdb>_protein.pdb` if
-you want to push the whole structure to CryptoBank instead.
-
-Selecting one chain is also what keeps SAM2 correct: it flattens residues
-across chains with no error, so more than one chain yields a quietly wrong
-ensemble rather than a crash. Stage 5b re-runs the same validation on the
-MODELLER output before the ensemble stage.
+- **Cleanup:** Non-standard residues, water molecules, and alternate atom locations are processed with MDAnalysis. Ligands are saved individually in `<pdb>_ligands/` for reference.
+- **Chain isolation:** Downstream steps run strictly on the single designated chain (`CHAIN`). Isolating the chain prevents multi-chain coordinate flattening during SAM2 simulation.
+- **SAM2 pre-check:** Before running conformational sampling, stage 5b verifies standard atom naming, chain consistency, and CA completeness on the MODELLER output.
 
 ---
 
 ## Prerequisites
 
 - **Linux** (x86_64)
-- **NVIDIA GPU** with a standard driver (version ≥ 525)
+- **NVIDIA GPU** with driver ≥ 525
 - **Apptainer** (or Singularity)
-- A free **MODELLER license key** (academic registration at
-  [salilab.org](https://salilab.org/modeller/registration.html))
+- **MODELLER license key** (free academic license at [salilab.org](https://salilab.org/modeller/registration.html))
 
-Nothing else. CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5, MODELLER 10.8 and SAM2 all
-live inside the container — no host Python, no conda environment, no `pip
-install`, no weights to download.
+CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5-XL, MODELLER 10.8, and SAM2 are all included in the container.
 
 ---
 
-## Files in this Directory
+## Project Structure
 
-| File | Purpose |
+| File / Directory | Description |
 |---|---|
-| `launch_pipeline_local.sh` | Launcher for the local version. |
-| `launch_pipeline_web.sh` | Launcher for the web version. |
-| `pipeline_local.def` | Apptainer definition for the local image. |
-| `pipeline_web.def` | Apptainer definition for the web image. |
-| `download_weights.sh` | Downloads the ~15 GB of weights. **Run this first.** |
-| `required_files_weights/` | Everything baked into the images (see manifest below). |
+| `launch_pipeline_local.sh` | Main pipeline bash launcher script |
+| `pipeline_local.def` | Apptainer recipe definition |
+| `pipeline_local.sif` | Container image (~15 GB) |
+| `download_weights.sh` | Download helper for model weights |
+| `required_files_weights/` | Scripts and weight directories packaged into the image |
 
-### `required_files_weights/` manifest
+### Container Scripts & Environments
 
-This directory is the single source of truth for the container contents. A
-truncated weight file is the most common cause of a broken build, so after copying
-the folder from elsewhere (e.g. OneDrive) run `bash download_weights.sh` once: it
-checks every weight against its SHA-256 and re-downloads only what is missing or
-damaged.
+The container uses two isolated Python environments to prevent dependency conflicts between MDTraj/PyTorch and MDAnalysis:
 
-| Path | Size |
-|---|---|
-| `run_pipeline.py` | 16 KB |
-| `predict_cryptic_local.py` | 8.6 KB |
-| `cryptobank_model_loader.py` | 27 KB |
-| `scrape_cryptobank.py` | 6.9 KB |
-| `esm_scanner.py` | 9.8 KB |
-| `modeller_mutate.py` | 5.7 KB |
-| `clean_structure.py` | 7.0 KB |
-| `make_report.py` | 11 KB |
-| `asam_cluster_analysis.py` | 4.2 KB |
-| `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB |
-| `prot_t5_xl_uniref50_full_v2/` | 6.8 GB |
-| `sam2_weights/weights/mdcath_1.0/` | 1.0 GB |
-| **total** | **~15 GB** |
-
-Populate it with `bash download_weights.sh`. Quick check:
-
-```bash
-du -sh required_files_weights          # expect ~15 G
-find required_files_weights -type l    # expect no output (no symlinks)
-```
-
-Script roles: `run_pipeline.py` orchestrates stages 1–4;
-`predict_cryptic_local.py` runs local ProtT5 inference;
-`cryptobank_model_loader.py` is the ProtT5 classification-head architecture;
-`scrape_cryptobank.py` queries the HF Space; `esm_scanner.py` runs ESM-1v;
-`modeller_mutate.py` does the point mutagenesis and sidechain minimization;
-`clean_structure.py` does the MDAnalysis structure preparation;
-`asam_cluster_analysis.py` clusters the SAM2 ensemble;
-`make_report.py` builds the run report and FASTA files.
-
-### Two conda environments inside each image
-
-| Env | Path | Holds |
+| Environment | Path | Packages |
 |---|---|---|
-| main | `/opt/conda` | torch 2.4.0+cu124, ESM-1v, MODELLER 10.8, SAM2, mdtraj, (local only: transformers/ProtT5) |
-| prep | `/opt/conda/envs/prep` | MDAnalysis 2.7.0 (and its scipy), used for structure prep and ensemble clustering |
+| `main` | `/opt/conda` | PyTorch 2.4 (CUDA 12.4), ESM-1v, ProtT5, MODELLER 10.8, SAM2, MDTraj (`numpy==1.26.4`) |
+| `prep` | `/opt/conda/envs/prep` | MDAnalysis 2.7.0, SciPy (used for structure cleanup and clustering) |
 
-MDAnalysis is deliberately isolated. The main env pins `numpy==1.26.4` because
-`torch 2.4.0` and `mdtraj 1.10.3` require it, and a shared install risks a
-dependency pulling numpy to 2.x and silently breaking SAM2. `run_pipeline.py`
-calls into the prep env through `--prep_python`, the same way it already uses
-separate interpreters for the scraper, ESM and MODELLER stages. `apptainer test`
-asserts the main env's numpy is still 1.26.4 after the prep env is created.
+#### Core scripts in `required_files_weights/`:
+- `run_pipeline.py`: Orchestrates stages 1 through 4.
+- `predict_cryptic_local.py`: Local ProtT5 cryptic pocket predictor.
+- `cryptobank_model_loader.py`: Classification head architecture for ProtT5 embeddings.
+- `esm_scanner.py`: ESM-1v in silico mutagenesis scanner.
+- `modeller_mutate.py`: Point mutation insertion and sidechain minimization with MODELLER.
+- `clean_structure.py`: MDAnalysis structure parsing and chain isolation.
+- `asam_cluster_analysis.py`: PCA and k-means clustering of SAM2 trajectories.
+- `make_report.py`: Generates the summary report and FASTA files.
 
 ---
 
-## How ESM-Scan Scoring Works
+## Mutation Selection with ESM-Scan
 
-Rather than mutating cryptic residues to a generic amino acid (like `GLU` or
-`ALA`), **ESM-Scan** leverages Facebook Research's pre-trained **ESM-1v** protein
-language model:
+ESM-Scan uses the ESM-1v protein language model to score substitutions at identified cryptic sites:
 
-1. The target chain sequence is passed through ESM-1v.
-2. For each position, the model computes log-probabilities for all 20 standard amino acids.
-3. For any mutation $\text{WT} \to \text{Mutant}$:
+1. Target chain sequence is evaluated by ESM-1v.
+2. Log-probabilities are computed for all 20 standard amino acids at each position:
    $$\text{Score} = \log P(\text{Mutant}) - \log P(\text{WT})$$
-4. All 19 alternative amino acids are evaluated at each cryptic site. The amino
-   acid with the **highest (best) score** is chosen for the mutation.
-5. A residue whose wild type is already charged/polar is scored but not
-   mutated, and the next residue down the crypticity ranking takes its place.
-   `TOP=5` therefore always yields 5 mutations; the report lists every
-   residue examined and why any were skipped.
-6. All scores are saved to `<PDB>_esm_summary.csv` for full transparency.
+3. Alternative substitutions within the allowed set (`MUTATION_SET`, default `charged_polar`) are ranked. The highest-scoring mutation is selected.
+4. If a wild-type residue at a predicted cryptic position is already charged or polar, it is skipped and the next ranked cryptic position is evaluated instead.
+5. All scores and rankings are exported to `<PDB>_esm_summary.csv`.
 
 ---
 
-## Downloading the Weights
+## Downloading Model Weights
 
-The weight files are ~15 GB in total, far too large for GitHub, so they are not
-in the repository. After cloning, fetch them with:
+Model weights total ~15 GB and must be downloaded prior to building the container image:
 
 ```bash
-cd pipeline/
 bash download_weights.sh
 ```
 
-That places everything in `required_files_weights/`, which is where the `.def`
-files expect it. Every file is checked against a pinned SHA-256, so a truncated
-or corrupted download is caught here instead of ending up inside an image.
-Re-running is safe: verified files are skipped and interrupted downloads resume. If you only intend to build the **web** image, skip the 6.8 GB
-ProtT5 download with `bash download_weights.sh --skip-prot-t5`.
+The script verifies file integrity using SHA-256 checksums and automatically resumes interrupted downloads.
 
 | Weight | Size | Source |
 |---|---|---|
-| `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB | `dl.fbaipublicfiles.com` (Facebook Research) |
-| `prot_t5_xl_uniref50_full_v2/` | 6.8 GB | HuggingFace `ThorbenF/prot_t5_xl_uniref50_full_v2` |
-| `sam2_weights/` | 1.0 GB | GitHub release `giacomo-janson/sam2` `data-1.0` |
+| `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB | Meta AI / Facebook Research |
+| `prot_t5_xl_uniref50_full_v2/` | 6.8 GB | RostLab / ThorbenF (Hugging Face) |
+| `sam2_weights/` | 1.0 GB | `giacomo-janson/sam2` |
 
-ProtT5 is pulled file by file rather than with `git clone`, because cloning that
-repository also drags in a ~6.8 GB `.git` LFS cache holding a second copy of the
-same weights.
+Verify files after download:
+
+```bash
+du -sh required_files_weights          # ~15 GB expected
+find required_files_weights -type l    # should return nothing (no broken symlinks)
+```
 
 ---
 
-## Building the Container Images
+## Building the Container Image
 
-Build from inside this directory, so the relative `%files` paths resolve:
-
-```bash
-cd pipeline/
-sudo apptainer build pipeline_web.sif   pipeline_web.def     # ~10 GB, faster
-sudo apptainer build pipeline_local.sif pipeline_local.def   # ~15 GB
-chmod 0644 pipeline_local.sif pipeline_web.sif
-```
-
-Building needs internet access (base image, conda, pip, the SAM2 clone) and
-about 70 GB of free disk for the local image (about 45 GB for the web image).
-At its peak the build holds the downloaded weights, the unpacked image, a
-temporary squashfs and the finished `.sif` all at once. Point `APPTAINER_TMPDIR`
-at a disk with room if `/tmp` is small (with `sudo`, pass it through using
-`sudo -E`).
-
-Verify an image before using or sharing it:
+To build `pipeline_local.sif` from `pipeline_local.def`:
 
 ```bash
-apptainer test pipeline_local.sif        # checks packages, and that weights are readable
-apptainer run-help pipeline_local.sif    # what the image is and how to drive it
-apptainer inspect --deffile pipeline_local.sif | diff - pipeline_local.def   # provenance
+sudo apptainer build pipeline_local.sif pipeline_local.def
+chmod 0644 pipeline_local.sif
 ```
 
-That last command is worth the habit: it proves the `.sif` was actually built
-from the `.def` sitting next to it.
+Building requires internet access and roughly 70 GB of temporary disk space. If `/tmp` is small, set `APPTAINER_TMPDIR` to a directory on a larger volume:
+
+```bash
+sudo -E APPTAINER_TMPDIR=/path/to/large_disk apptainer build pipeline_local.sif pipeline_local.def
+```
+
+Verify the image:
+
+```bash
+apptainer test pipeline_local.sif
+```
 
 ---
 
-## Sharing this Folder
+## Notes on File Permissions & License
 
-Copy the whole `pipeline/` directory. A recipient can either run the prebuilt
-`.sif` files or rebuild them from the `.def` files.
-
-Two things to do after downloading from OneDrive:
-
-```bash
-chmod +x launch_pipeline_local.sh launch_pipeline_web.sh   # OneDrive strips the executable bit
-du -sh required_files_weights                        # confirm the transfer completed
-```
-
-The images are built with the baked weights world-readable, so they work
-regardless of which user account runs them.
-
-> **MODELLER license.** The launchers ship with a placeholder key. Sali Lab
-> licenses are issued per user — register for your own free academic key at
-> [salilab.org](https://salilab.org/modeller/registration.html) and set it via
-> `MODELLER_KEY` rather than reusing someone else's.
+1. **Executable bit:** If files are transferred via cloud storage (e.g., OneDrive or Google Drive), the executable bit may be stripped. Re-enable it with:
+   ```bash
+   chmod +x launch_pipeline_local.sh download_weights.sh
+   ```
+2. **MODELLER license:** MODELLER requires an academic license key. Set your key before running:
+   ```bash
+   export MODELLER_KEY="your_key"
+   ```
+   or edit `MODELLER_KEY` directly in `launch_pipeline_local.sh`.

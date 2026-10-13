@@ -1,245 +1,254 @@
-# CryptiScan
+# CryptiScan Pipeline
 
-Find a cryptic binding pocket from sequence, open it, and measure how far it
-opened. Everything runs in one Apptainer image on one GPU.
+End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
 
-**You edit two lines: the PDB accession and the chain.** No residue numbers,
-no structural alignment, no manual site definition at any point.
+```
+                      PDB ID  or  local .pdb
+                                  │
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 1. Fetch from RCSB + Cleanup        [MDAnalysis]              │
+  │    <pdb>_raw.pdb       entry as downloaded                    │
+  │    <pdb>_protein.pdb   full protein, all chains               │
+  │    <pdb>_ligands/      one file per ligand                    │
+  │    waters dropped, alternate locations collapsed              │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 2. Chain Selection                  [MDAnalysis]              │
+  │    <pdb>.pdb   chain specified by CHAIN in the launcher.      │
+  │    Standard residues and CA atoms verified. Downstream stages │
+  │    operate on this single chain.                              │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 3. Cryptic Residue Prediction       [ProtT5]                  │
+  │    Local ProtT5 inference -> <PDB>_<chain>_cryptic.json       │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 4. ESM-Scan                         [ESM-1v]                  │
+  │    Scores substitutions and selects top charged/polar swaps   │
+  │    to promote pocket opening.                                 │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 5. In Silico Mutagenesis            [MODELLER]                │
+  │    Introduces mutations and relaxes sidechains                │
+  │    -> <pdb>_top<N>_esm_mutant.pdb                             │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 5b. Validate for SAM2               [MDAnalysis]              │
+  │     Validates structure format -> sam2_input.pdb              │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 6. Ensemble Generation             [SAM2 / aSAM]              │
+  │    GPU conformational sampling -> ensemble_output.*           │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 6b. Ensemble Clustering            [MDAnalysis + scipy]       │
+  │     PCA + k-means clustering on CA atoms                      │
+  │     -> ensemble_clusters/                                     │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 7. Report and Sequences                                       │
+  │    <jobname>_report.txt, <PDB>_<chain>_wildtype.fasta,        │
+  │    <PDB>_<chain>_mutant.fasta                                 │
+  └───────────────────────────────┬───────────────────────────────┘
+                                  ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ 8. Archive  ->  <jobname>_<timestamp>.zip                     │
+  └───────────────────────────────────────────────────────────────┘
+```
+
+The pipeline runs fully locally inside an Apptainer container (`pipeline_local.sif`). All scripts, dependencies, and model weights are packaged directly in the image. Internet access is only required if downloading structures from RCSB; providing a local `.pdb` file path allows fully offline execution.
 
 ---
 
-## The pipeline
+## How to Run
 
-```
-  ┌────────────────────────────────────────────────────────────┐
-  │                     PDB ID   +   CHAIN                     │
-  └────────────────────────────────────────────────────────────┘
-                                 │   the only two inputs
-                                 ▼
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   A   DISCOVERY                                                
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ┌────────────────────────────────────────────────────────────┐
-  │  1  Target ingestion            RCSB API / local .pdb      │
-  ├────────────────────────────────────────────────────────────┤
-  │  2  Structure curation          MDAnalysis 2.7             │
-  ├────────────────────────────────────────────────────────────┤
-  │  3  Chain selection             MDAnalysis 2.7             │
-  ├────────────────────────────────────────────────────────────┤
-  │  4  Crypticity scoring          CryptoBank ProtT5          │
-  └────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   B   PERTURBATION  AND  GENERATIVE SAMPLING                   
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ┌────────────────────────────────────────────────────────────┐
-  │  5  Variant selection           ESM-1v (650M)              │
-  ├────────────────────────────────────────────────────────────┤
-  │  6  Mutagenesis                 MODELLER 10.8              │
-  ├────────────────────────────────────────────────────────────┤
-  │  7  Mutant ensemble             aSAM  2000 @ 300 K         │
-  ├────────────────────────────────────────────────────────────┤
-  │  8  Wild-type ensemble          aSAM  2000 @ 300 K         │
-  └────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   C   QUANTIFICATION,  CONTROLS  AND  REPORTING                
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ┌────────────────────────────────────────────────────────────┐
-  │  9  Clustering                  PCA + k-means              │
-  ├────────────────────────────────────────────────────────────┤
-  │ 10  Pocket detection            fpocket  -P  -u 2          │
-  ├────────────────────────────────────────────────────────────┤
-  │ 11  Statistics, figures         Cliff's d, KS, MWU         │
-  ├────────────────────────────────────────────────────────────┤
-  │ 12  Report and archive          <job>.zip                  │
-  └────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-  ┌────────────────────────────────────────────────────────────┐
-  │             EFFECT SIZE  vs  MATCHED WILD TYPE             │
-  └────────────────────────────────────────────────────────────┘
-```
-
-Stage 7 and 8 are the GPU cost. Stage 10 parallelises across CPU cores.
-
----
-
-## Quick start
+Configure parameters at the top of `launch_pipeline_local.sh` and run:
 
 ```bash
-cd pipeline/
-
-bash download_weights.sh                                    # ~15 GB, once
-sudo apptainer build pipeline_local.sif pipeline_local.def  # ~2 h
-
-export MODELLER_KEY='your_academic_key'
-# edit PDB and CHAIN at the top of launch_pipeline_local.sh
-nohup bash launch_pipeline_local.sh > run.log 2>&1 &
-tail -f run.log
+bash launch_pipeline_local.sh
 ```
 
-A complete worked example is in [`sample_output/`](sample_output/).
+### Configuration Options
 
----
-
-## Configuration
-
-Section 1 of `launch_pipeline_local.sh` is the whole user interface:
+Edit these variables near the top of `launch_pipeline_local.sh`:
 
 ```bash
-PDB="2WGB"      # PDB accession, or a path to a local .pdb
-CHAIN="A"       # chain to analyse
+PDB="1JWP"                     # PDB code or path to a local .pdb file
+CHAIN="A"                      # Target chain identifier
+TOP=5                          # Number of cryptic residues to mutate
+MODE="combined"                # "combined" = one multi-mutant; "independent" = N separate mutants
+STRATEGY="esm"                 # Mutation strategy ("esm")
+MUTATION_SET="charged_polar"   # Candidate pool: charged_polar | charged | polar | all | "ASP,GLU,..."
+N_CLUSTERS=10                  # Number of clusters for SAM2 ensemble
+PCA_DIM=10                     # Number of PCA components for clustering
+JOBNAME="${JOBNAME:-1jwp}"     # Output folder prefix
+MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"  # Sali Lab MODELLER license key
 ```
 
-Section 2 holds the values used in the paper. Change them only deliberately,
-and report what you changed.
-
-| Setting | Default | What it does |
-|---|---|---|
-| `TOP` | 5 | mutations delivered. A position whose wild type is already charged or polar is skipped and the next-ranked one is used, so you always get this many. |
-| `MUTATION_SET` | `charged_polar` | the candidate set. An unrestricted scan picks conservative hydrophobic swaps and leaves the pocket shut. |
-| `FRAMES` | 2000 | conformations per ensemble. 500 reproduces the effect sizes at a quarter of the cost, with weaker bounds on the controls. |
-| `TEMPERATURE` | 300 | kelvin |
-| `POCKET_MIN_EXPLICIT` | 2 | fpocket `-u`. See below. |
-| `POCKET_SPECIFICITY` | true | run the unguided pass that gives the specificity control. Doubles Stage 10. |
-| `POCKET_SCRATCH` | `$TMPDIR` | **point this at local disk.** Stage 10 writes one file per frame, and on network storage that dominates the whole runtime. |
-
-`MODELLER_KEY` and `JOBNAME` can be set from the environment instead:
+Parameters can also be passed as environment variables:
 
 ```bash
-JOBNAME=2wgb_rep2 MODELLER_KEY=your_key bash launch_pipeline_local.sh
+JOBNAME=1lzt MODELLER_KEY="your_key" bash launch_pipeline_local.sh
 ```
 
----
-
-## Two settings worth understanding
-
-**`POCKET_MIN_EXPLICIT`, fpocket's `-u`.** An alpha sphere is kept only if at
-least this many of its four contact atoms belong to the cryptic residues.
-fpocket's own default is 4, meaning all four, which for a five-residue site
-keeps almost nothing and reports every frame as closed. That looks like a
-negative result, not a parameter error. Use one value across everything you
-intend to compare, and state it. `POCKET_USWEEP=1` writes the sensitivity
-table.
-
-**`RUN_WT_ENSEMBLE`, default true.** An absolute pocket volume carries no
-information: "open in 95% of frames" means nothing until you know the wild
-type is 54%. Both ensembles come from one configuration block because a
-difference in temperature, frame count or seed between them confounds the
-comparison. Turning this off does not give a weaker result, it gives no
-result.
+Before running stage 1, the launcher validates that `pipeline_local.sif` exists, matches required dependencies, and has readable weights.
 
 ---
 
-## What you get
+## Output Structure
+
+Results are packaged into `<jobname>_<timestamp>.zip`:
 
 ```
 <jobname>_<timestamp>/
-├── 2wgb.pdb                      curated chain, used by every later stage
-├── 2wgb_esm_summary.csv          score for every candidate substitution
-├── 2wgb_top5_esm_mutant.pdb      the mutant
-├── ensemble_output.{top.pdb,traj.dcd}   MUTANT ensemble
-├── wt_ensemble.{top.pdb,traj.dcd}       WILD-TYPE ensemble
-├── ensemble_clusters/            10 representatives, weighted, for docking
-├── pocket_analysis/
-│   ├── pocket_report.txt         read this first
-│   ├── pocket_summary.json       machine-readable
-│   ├── {mutant,wildtype}_pocket.csv        per-frame descriptors
-│   ├── {mutant,wildtype}_rmsf.csv          per-residue flexibility
-│   └── {mutant,wildtype}_persistence.csv   which residues line the pocket
-├── figures/
-│   ├── fig2_opening.{png,pdf}        exposure, volume, effect sizes
-│   ├── figS1_integrity.{png,pdf}     Rg and secondary structure
-│   ├── figS2_rmsf.{png,pdf}
-│   ├── figS3_persistence.{png,pdf}
-│   ├── figS4_clusters.{png,pdf}
-│   └── stats_summary.{csv,txt}
-├── 2WGB_manifest.json            run manifest, mutations applied
-└── 2wgb_local_report.txt
+├── 1jwp_raw.pdb                     Downloaded raw entry from RCSB
+├── 1jwp_protein.pdb                 Cleaned protein (all chains)
+├── 1jwp_ligands/PO4_A1.pdb          Extracted ligands (one file per residue)
+├── 1jwp_prep.json                   Summary of cleaned/dropped residues
+├── 1jwp.pdb                         Target chain used for all pipeline stages
+├── 1JWP_A_cryptic.json              Predicted cryptic residue positions and probabilities
+├── 1jwp_esm_summary.csv             ESM scores for tested substitutions
+├── 1jwp_top5_esm_mutant.pdb         Relaxed MODELLER mutant structure
+├── sam2_input.pdb                   Structure validated for SAM2
+├── ensemble_output.*                SAM2 conformational ensemble trajectory and topology
+├── ensemble_clusters/
+│   ├── clustering/cluster_representatives.dcd   Representative frame per cluster
+│   ├── clustering/cluster_representatives.json  Cluster assignments and population counts
+│   └── cluster_meta.sh              Summary counts
+├── 1JWP_manifest.json               Run metadata and configuration snapshot
+├── 1jwp_local_report.txt            Plaintext summary of the run
+├── 1JWP_A_wildtype.fasta            Wild-type sequence of the target chain
+└── 1JWP_A_mutant.fasta              Mutated sequence
+```
+
+### Key Pipeline Details
+
+- **Cleanup:** Non-standard residues, water molecules, and alternate atom locations are processed with MDAnalysis. Ligands are saved individually in `<pdb>_ligands/` for reference.
+- **Chain isolation:** Downstream steps run strictly on the single designated chain (`CHAIN`). Isolating the chain prevents multi-chain coordinate flattening during SAM2 simulation.
+- **SAM2 pre-check:** Before running conformational sampling, stage 5b verifies standard atom naming, chain consistency, and CA completeness on the MODELLER output.
+
+---
+
+## Prerequisites
+
+- **Linux** (x86_64)
+- **NVIDIA GPU** with driver ≥ 525
+- **Apptainer** (or Singularity)
+- **MODELLER license key** (free academic license at [salilab.org](https://salilab.org/modeller/registration.html))
+
+CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5-XL, MODELLER 10.8, and SAM2 are all included in the container.
+
+---
+
+## Project Structure
+
+| File / Directory | Description |
+|---|---|
+| `launch_pipeline_local.sh` | Main pipeline bash launcher script |
+| `pipeline_local.def` | Apptainer recipe definition |
+| `pipeline_local.sif` | Container image (~15 GB) |
+| `download_weights.sh` | Download helper for model weights |
+| `required_files_weights/` | Scripts and weight directories packaged into the image |
+
+### Container Scripts & Environments
+
+The container uses two isolated Python environments to prevent dependency conflicts between MDTraj/PyTorch and MDAnalysis:
+
+| Environment | Path | Packages |
+|---|---|---|
+| `main` | `/opt/conda` | PyTorch 2.4 (CUDA 12.4), ESM-1v, ProtT5, MODELLER 10.8, SAM2, MDTraj (`numpy==1.26.4`) |
+| `prep` | `/opt/conda/envs/prep` | MDAnalysis 2.7.0, SciPy (used for structure cleanup and clustering) |
+
+#### Core scripts in `required_files_weights/`:
+- `run_pipeline.py`: Orchestrates stages 1 through 4.
+- `predict_cryptic_local.py`: Local ProtT5 cryptic pocket predictor.
+- `cryptobank_model_loader.py`: Classification head architecture for ProtT5 embeddings.
+- `esm_scanner.py`: ESM-1v in silico mutagenesis scanner.
+- `modeller_mutate.py`: Point mutation insertion and sidechain minimization with MODELLER.
+- `clean_structure.py`: MDAnalysis structure parsing and chain isolation.
+- `asam_cluster_analysis.py`: PCA and k-means clustering of SAM2 trajectories.
+- `make_report.py`: Generates the summary report and FASTA files.
+
+---
+
+## Mutation Selection with ESM-Scan
+
+ESM-Scan uses the ESM-1v protein language model to score substitutions at identified cryptic sites:
+
+1. Target chain sequence is evaluated by ESM-1v.
+2. Log-probabilities are computed for all 20 standard amino acids at each position:
+   $$\text{Score} = \log P(\text{Mutant}) - \log P(\text{WT})$$
+3. Alternative substitutions within the allowed set (`MUTATION_SET`, default `charged_polar`) are ranked. The highest-scoring mutation is selected.
+4. If a wild-type residue at a predicted cryptic position is already charged or polar, it is skipped and the next ranked cryptic position is evaluated instead.
+5. All scores and rankings are exported to `<PDB>_esm_summary.csv`.
+
+---
+
+## Downloading Model Weights
+
+Model weights total ~15 GB and must be downloaded prior to building the container image:
+
+```bash
+bash download_weights.sh
+```
+
+The script verifies file integrity using SHA-256 checksums and automatically resumes interrupted downloads.
+
+| Weight | Size | Source |
+|---|---|---|
+| `esm1v_t33_650M_UR90S_1.pt` | 7.3 GB | Meta AI / Facebook Research |
+| `prot_t5_xl_uniref50_full_v2/` | 6.8 GB | RostLab / ThorbenF (Hugging Face) |
+| `sam2_weights/` | 1.0 GB | `giacomo-janson/sam2` |
+
+Verify files after download:
+
+```bash
+du -sh required_files_weights          # ~15 GB expected
+find required_files_weights -type l    # should return nothing (no broken symlinks)
 ```
 
 ---
 
-## Reading `pocket_report.txt`
+## Building the Container Image
 
-It is a gated decision. Read it top down and stop at the first gate that fails.
+To build `pipeline_local.sif` from `pipeline_local.def`:
 
-1. **Headline.** Change in mean pocket volume, change in open fraction, and
-   Cliff's delta. With thousands of independent frames a *p*-value is driven by
-   sample size, so delta is the quantity to report.
-2. **Gate: specificity.** Below a ratio of about 2, the mutation loosened the
-   whole surface and the cryptic number is not about the cryptic site.
-3. **Gate: fold integrity.** Delta Rg, helix and sheet should sit near zero. A
-   large shift means you measured partial unfolding, not a cavity.
-4. **Cross-check: exposure.** `cryptic_sasa_A2` is geometric and never touches
-   fpocket. Volume and SASA both up is the strong result. SASA up with flat
-   volume is a groove, not a cavity.
+```bash
+sudo apptainer build pipeline_local.sif pipeline_local.def
+chmod 0644 pipeline_local.sif
+```
 
-`open` and `closed` are results. `no_output` and `fpocket_failed` are tool
-failures, not null results, and the figure stage refuses to draw volume panels
-when they are present.
+Building requires internet access and roughly 70 GB of temporary disk space. If `/tmp` is small, set `APPTAINER_TMPDIR` to a directory on a larger volume:
 
----
+```bash
+sudo -E APPTAINER_TMPDIR=/path/to/large_disk apptainer build pipeline_local.sif pipeline_local.def
+```
 
-## Requirements
-
-- Linux x86_64, NVIDIA GPU with driver 525 or later, Apptainer or Singularity
-- A free academic MODELLER key from [salilab.org](https://salilab.org/modeller/registration.html)
-- About 70 GB free to build, a few GB of local scratch per run
-
-CUDA 12.4, PyTorch 2.4, ESM-1v, ProtT5, MODELLER 10.8, aSAM and fpocket are all
-inside the image. No host Python, no conda environment, no `pip install`.
-
-Verify an image before using or sharing it:
+Verify the image:
 
 ```bash
 apptainer test pipeline_local.sif
-apptainer inspect --deffile pipeline_local.sif | diff - pipeline_local.def
 ```
 
-The second command proves the image was built from the definition beside it.
-The launcher passes no bind mounts by design, so a stale image fails the
-payload check in seconds rather than three hours in.
-
 ---
 
-## Re-analysing an ensemble you already have
+## Notes on File Permissions & License
 
-Stages 10 and 11 run on existing ensembles without repeating the sampling:
-
-```bash
-apptainer exec pipeline_local.sif /opt/conda/bin/python3 \
-  /opt/pipeline/cryptic_pocket_analysis.py \
-    --mutant-top ensemble_output.top.pdb --mutant-dcd ensemble_output.traj.dcd \
-    --wt-top wt_ensemble.top.pdb --wt-dcd wt_ensemble.traj.dcd \
-    --residues-json <PDB>_manifest.json --source-pdb <pdb>.pdb --chain A \
-    --outdir pocket_analysis --min-explicit 2 \
-    --fpocket "$FPOCKET_BIN" --nproc "$(nproc)"
-```
-
-Pass the **wild-type** chain as `--source-pdb`, not the mutant, and the
-**manifest** as `--residues-json`, not the raw crypticity output. Add
-`--stride 100` for a one-minute check first.
-
----
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `launch_pipeline_local.sh` | the launcher, the only file you edit |
-| `pipeline_local.def` | Apptainer definition |
-| `download_weights.sh` | fetches the weights, checksum-verified. Run first. |
-| `required_files_weights/` | everything baked into the image |
-| `sample_output/` | a complete 2WGB run |
-
----
-
-## Citing
-
-Please cite the resource paper and the underlying mutagenesis protocol, with
-the models the pipeline calls: CryptoBank, ESM-1v, aSAM and mdCATH, MODELLER,
-fpocket, MDAnalysis and MDTraj. Full references are in the manuscript.
+1. **Executable bit:** If files are transferred via cloud storage (e.g., OneDrive or Google Drive), the executable bit may be stripped. Re-enable it with:
+   ```bash
+   chmod +x launch_pipeline_local.sh download_weights.sh
+   ```
+2. **MODELLER license:** MODELLER requires an academic license key. Set your key before running:
+   ```bash
+   export MODELLER_KEY="your_key"
+   ```
+   or edit `MODELLER_KEY` directly in `launch_pipeline_local.sh`.

@@ -32,10 +32,23 @@
 *.index
 
 # Downloaded Weight Directories (under required_files_weights)
+asam
 pipeline/required_files_weights/prot_t5_xl_uniref50_full_v2/
 pipeline/required_files_weights/sam2_weights/
+pipeline/md_setup
+pipeline/manuscript
+pipeline/pipeline_web.def
+pipeline/pipeline_web_md.def
+pipeline/README_md.def
+pipeline/launch_pipeline_web.sh
+pipeline/launch_pipeline_local_md.sh
+launch_pipeline_web_md.sh
 prot_t5_xl_uniref50_full_v2/
 sam2_weights/
+cryptic_sites_software
+ESM-Scan
+Mutation_pipeline
+sam
 
 # Large Compressed Archives & Installers
 *.zip
