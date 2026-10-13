@@ -4,18 +4,23 @@ End-to-end pipeline for predicting cryptic binding sites, designing point mutati
 
 ```mermaid
 flowchart TD
-    IN(["PDB ID or local .pdb"]) --> S1
+    subgraph row1 [" "]
+        direction LR
+        IN(["PDB ID or .pdb"]) --> S1["1 · Fetch & Cleanup<br/><i>MDAnalysis</i>"] --> S2["2 · Chain Selection<br/><i>MDAnalysis</i>"] --> S3["3 · Cryptic Prediction<br/><i>ProtT5</i>"]
+    end
 
-    S1["1 · Fetch & Cleanup<br/><i>MDAnalysis</i>"] --> S2
-    S2["2 · Chain Selection<br/><i>MDAnalysis</i>"] --> S3
-    S3["3 · Cryptic Residue Prediction<br/><i>ProtT5</i>"] --> S4
-    S4["4 · ESM-Scan Scoring<br/><i>ESM-1v</i>"] --> S5
-    S5["5 · In Silico Mutagenesis<br/><i>MODELLER</i>"] --> S5b
-    S5b["5b · SAM2 Input Validation<br/><i>MDAnalysis</i>"] --> S6
-    S6["6 · Ensemble Generation<br/><i>SAM2 · GPU</i>"] --> S6b
-    S6b["6b · Ensemble Clustering<br/><i>PCA + k-means</i>"] --> S7
-    S7["7 · Report & FASTA Export"] --> S8
-    S8(["8 · Archive → .zip"])
+    subgraph row2 [" "]
+        direction LR
+        S4["4 · ESM-Scan<br/><i>ESM-1v</i>"] --> S5["5 · Mutagenesis<br/><i>MODELLER</i>"] --> S5b["5b · Validation<br/><i>MDAnalysis</i>"]
+    end
+
+    subgraph row3 [" "]
+        direction LR
+        S6["6 · Ensemble Gen.<br/><i>SAM2 · GPU</i>"] --> S6b["6b · Clustering<br/><i>PCA + k-means</i>"] --> S7["7 · Report & FASTA"] --> S8(["8 · Archive .zip"])
+    end
+
+    S3 --> S4
+    S5b --> S6
 ```
 
 
