@@ -4,33 +4,18 @@ End-to-end pipeline for predicting cryptic binding sites, designing point mutati
 
 ```mermaid
 flowchart TD
-    INPUT(["PDB Code or Local .pdb File"]) --> S1
+    IN(["PDB ID or local .pdb"]) --> S1
 
-    subgraph PREP ["Structure Preparation"]
-        S1["1. Fetch & Cleanup (MDAnalysis)<br/>• Extracts full protein (all chains)<br/>• Isolates ligands to separate files<br/>• Drops waters & collapses alternate locations"]
-        S2["2. Chain Selection (MDAnalysis)<br/>• Isolates specified target CHAIN<br/>• Validates standard residues and CA presence"]
-        S1 --> S2
-    end
-
-    subgraph MUT ["Mutagenesis & Design"]
-        S3["3. Cryptic Pocket Prediction (ProtT5)<br/>• Local inference of per-residue crypticity"]
-        S4["4. ESM-Scan (ESM-1v)<br/>• Scores all 19 amino acid substitutions<br/>• Selects top charged/polar swaps to open pocket"]
-        S5["5. In Silico Mutagenesis (MODELLER)<br/>• Introduces mutations & relaxes sidechains"]
-        S5b["5b. SAM2 Validation (MDAnalysis)<br/>• Verifies structure topology and formatting"]
-        S2 --> S3 --> S4 --> S5 --> S5b
-    end
-
-    subgraph SAM ["Conformational Sampling"]
-        S6["6. Ensemble Generation (SAM2 / aSAM)<br/>• GPU-accelerated conformational sampling"]
-        S6b["6b. Ensemble Clustering (MDAnalysis + SciPy)<br/>• PCA + k-means clustering on CA coordinates<br/>• Extracts representative cluster frames"]
-        S5b --> S6 --> S6b
-    end
-
-    subgraph PACK ["Reporting & Packaging"]
-        S7["7. Report & Sequences<br/>• Generates summary report & FASTA files"]
-        S8(["8. Compressed Output Archive<br/>jobname_timestamp.zip"])
-        S6b --> S7 --> S8
-    end
+    S1["1 · Fetch & Cleanup<br/><i>MDAnalysis</i>"] --> S2
+    S2["2 · Chain Selection<br/><i>MDAnalysis</i>"] --> S3
+    S3["3 · Cryptic Residue Prediction<br/><i>ProtT5</i>"] --> S4
+    S4["4 · ESM-Scan Scoring<br/><i>ESM-1v</i>"] --> S5
+    S5["5 · In Silico Mutagenesis<br/><i>MODELLER</i>"] --> S5b
+    S5b["5b · SAM2 Input Validation<br/><i>MDAnalysis</i>"] --> S6
+    S6["6 · Ensemble Generation<br/><i>SAM2 · GPU</i>"] --> S6b
+    S6b["6b · Ensemble Clustering<br/><i>PCA + k-means</i>"] --> S7
+    S7["7 · Report & FASTA Export"] --> S8
+    S8(["8 · Archive → .zip"])
 ```
 
 
