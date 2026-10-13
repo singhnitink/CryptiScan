@@ -54,7 +54,7 @@ JOBNAME="${JOBNAME:-1jwp}_local"     # Job name for folder and zip naming (e.g. 
 # MODELLER requires a free academic license key from Sali Lab.
 # Register for free at: https://salilab.org/modeller/registration.html
 # Paste your key below, or export MODELLER_KEY in your shell to override it.
-MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"
+MODELLER_KEY="$MODELLER_KEY"
 
 # 3. Job Directory & Container Setup
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")

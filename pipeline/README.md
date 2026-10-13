@@ -91,7 +91,7 @@ MUTATION_SET="charged_polar"   # Candidate pool: charged_polar | charged | polar
 N_CLUSTERS=10                  # Number of clusters for SAM2 ensemble
 PCA_DIM=10                     # Number of PCA components for clustering
 JOBNAME="${JOBNAME:-1jwp}"     # Output folder prefix
-MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"  # Sali Lab MODELLER license key
+MODELLER_KEY="$MODELLER_KEY""  # Sali Lab MODELLER license key
 ```
 
 Parameters can also be passed as environment variables:
