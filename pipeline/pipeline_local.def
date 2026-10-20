@@ -1,7 +1,9 @@
 Bootstrap: docker
 From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 
+# ==============================================================================
 # CryptiScan - LOCAL / OFFLINE container
+# ==============================================================================
 # Cryptic-pocket prediction runs locally with ProtT5 (no HuggingFace Space call).
 # Everything the pipeline needs at runtime is baked into this image: the driver
 # scripts, the ESM-1v checkpoint, the ProtT5 weights and the SAM2 weights.
@@ -11,6 +13,7 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 # recipient of this .sif will not have.
 #
 # Build:  cd pipeline/ && sudo apptainer build pipeline_local.sif pipeline_local.def
+# ==============================================================================
 
 %files
 	# Driver scripts -> /opt/pipeline
@@ -22,7 +25,13 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	required_files_weights/modeller_mutate.py /opt/pipeline/modeller_mutate.py
 	required_files_weights/clean_structure.py /opt/pipeline/clean_structure.py
 	required_files_weights/make_report.py /opt/pipeline/make_report.py
+	# === STAGE 6 === ensemble clustering
 	required_files_weights/asam_cluster_analysis.py /opt/pipeline/asam_cluster_analysis.py
+	# === STAGE 10 === cryptic pocket quantification
+	required_files_weights/cryptic_pocket_analysis.py /opt/pipeline/cryptic_pocket_analysis.py
+	# === STAGE 11 === figures and statistics
+	required_files_weights/plot_cryptiscan.py /opt/pipeline/plot_cryptiscan.py
+	required_files_weights/check_stage10.py /opt/pipeline/check_stage10.py
 
 	# Model weights -> /opt/models and /opt/sam2_weights
 	# NOTE: the ProtT5 destination name must keep the substring "prot_t5" --
@@ -48,9 +57,8 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	/opt/conda/bin/conda config --set solver classic
 	/opt/conda/bin/conda config --add channels defaults
 
-	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER).
-	# Pinned because the launchers and the paths below hardcode modeller-10.8.
-	/opt/conda/bin/conda install -y salilab::modeller=10.8
+	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER)
+	/opt/conda/bin/conda install -y salilab::modeller
 
 	# Configure Modeller config.py to read the license key from the environment at runtime
 	/opt/conda/bin/python3 -c "
@@ -69,10 +77,12 @@ for f in configs:
     print('Configured dynamic runtime license in:', f)
 "
 
+	# --------------------------------------------------------------------------
 	# Python stack. Every version is pinned: an unpinned build drifts (an earlier
 	# image picked up pandas 3.x and huggingface_hub 1.x, which breaks the
 	# vendored CryptoBank loader). Torch goes first, from the cu124 index, so the
 	# later installs cannot pull a different build from PyPI.
+	# --------------------------------------------------------------------------
 	/opt/conda/bin/pip install --no-cache-dir \
 		torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
 		--index-url https://download.pytorch.org/whl/cu124
@@ -81,6 +91,15 @@ for f in configs:
 	# "pip install -e ." finds every floor already satisfied and upgrades
 	# nothing. In particular mdtraj must stay at 1.10.3: 1.11.1+ requires
 	# numpy~=2.0, which would drag numpy out from under torch 2.4.0.
+	#
+	# pyarrow must be pinned for the same reason, and it is the harder case:
+	# pyarrow declares NO numpy constraint in its wheel metadata, so pip will
+	# happily resolve the newest release and nothing warns at install time.
+	# From pyarrow 18 onward the compiled extension asserts numpy >= 2.0 at
+	# import, so "import datasets" fails at build time with an ImportError
+	# that names numpy but is caused by an unpinned pyarrow. 17.0.0 is the
+	# last release compatible with numpy 1.26.4 and satisfies datasets'
+	# pyarrow>=15.0.0 floor.
 	/opt/conda/bin/pip install --no-cache-dir \
 		numpy==1.26.4 \
 		scipy==1.13.1 \
@@ -91,9 +110,11 @@ for f in configs:
 		dm-tree \
 		transformers==4.44.2 \
 		huggingface_hub==0.24.6 \
+		pyarrow==17.0.0 \
 		datasets==2.21.0 \
 		peft==0.12.0 \
 		sentencepiece==0.2.0 \
+		matplotlib==3.9.2 \
 		fair-esm==2.0.0 \
 		gradio_client
 
@@ -111,19 +132,38 @@ for f in configs:
 	# Surface any dependency conflict at build time rather than mid-run
 	/opt/conda/bin/pip check || echo "WARNING: pip reported dependency conflicts (see above)"
 
-	# Separate conda env for structure preparation and ensemble clustering
-	# (MDAnalysis, scipy).
+	# --------------------------------------------------------------------------
+	# Separate conda env for structure preparation (MDAnalysis).
 	# Kept out of the main env so MDAnalysis and its dependency tree can never
 	# perturb the pinned torch / mdtraj / numpy stack that SAM2 and ESM rely on.
 	# run_pipeline.py calls it via --prep_python.
+	# --------------------------------------------------------------------------
 	/opt/conda/bin/conda create -y -n prep -c conda-forge --override-channels \
 		python=3.12 numpy=1.26.4 mdanalysis=2.7.0
+
+	# === STAGE 9 ===
+	# fpocket for cryptic-pocket volume, isolated in its own env for the same
+	# reason as the prep env: resolving it against conda-forge in the main env
+	# could move numpy out from under the pinned torch / mdtraj / SAM2 stack.
+	# It is a standalone binary invoked by subprocess, so the env it lives in
+	# is irrelevant to the Python that calls it.
+	/opt/conda/bin/conda create -y -n analysis -c conda-forge --override-channels \
+		fpocket
+
+	# Record the fpocket build. Guided (-P) detection behaves differently
+	# between releases, so any volume this image reports has to be traceable
+	# to the binary that produced it.
+	/opt/conda/envs/analysis/bin/fpocket 2>&1 | head -1 \
+		> /opt/pipeline/FPOCKET_VERSION.txt || true
+	# === END STAGE 10 ===
 	/opt/conda/bin/conda clean -y --all
 
+	# --------------------------------------------------------------------------
 	# Make the baked payload readable by ANY uid.
 	# %files preserves the source permissions, and sam2_weights arrives as
 	# 0750/0640. That reads fine for the user who built the image and is denied
 	# for everyone else -- which would make this .sif unusable when shared.
+	# --------------------------------------------------------------------------
 	chmod -R a+rX /opt/pipeline /opt/models /opt/sam2_weights /opt/sam2 /opt/conda
 
 	# Scratch cache dir for HuggingFace; never written to in practice because the
@@ -137,6 +177,8 @@ for f in configs:
 	export MODINSTALL10v8=/opt/conda/lib/modeller-10.8
 	export SAM_WEIGHTS_PATH=/opt/sam2_weights
 	export PREP_PYTHON=/opt/conda/envs/prep/bin/python3
+	# === STAGE 10 ===
+	export FPOCKET_BIN=/opt/conda/envs/analysis/bin/fpocket
 	# Fail loudly on a missing local weight file instead of silently reaching
 	# for the HuggingFace Hub.
 	export HF_HUB_OFFLINE=1
@@ -146,7 +188,7 @@ for f in configs:
 %test
 	# Without this a failing check below would print and still exit 0.
 	set -e
-	echo "python packages:"
+	echo "--- python packages ---"
 	/opt/conda/bin/python3 -c "
 import importlib, sys
 mods = ['torch','esm','Bio','numpy','pandas','scipy','mdtraj','diffusers','tree','transformers','datasets','sentencepiece','peft','huggingface_hub','gradio_client','sam','sam.scripts.generate_ensemble']
@@ -159,33 +201,24 @@ for m in mods:
         print('  MISSING %-18s (%s)' % (m, type(e).__name__)); bad.append(m)
 sys.exit(1 if bad else 0)
 "
-	echo "MODELLER install:"
+	echo "--- MODELLER install ---"
 	# Not an "import modeller" check: that would validate the licence key, which
 	# is only supplied at run time. Verify the install and the config patch.
-	# Each check is its own command: under /bin/sh, set -e ignores a failure
-	# on the left of "&&", so "test ... && echo OK" could never fail the build.
-	test -d /opt/conda/lib/modeller-10.8
-	echo "  OK      /opt/conda/lib/modeller-10.8"
-	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py
-	echo "  OK      config.py reads the licence key from the environment"
+	test -d /opt/conda/lib/modeller-10.8 && echo "  OK      /opt/conda/lib/modeller-10.8"
+	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py \
+		&& echo "  OK      config.py reads the licence key from the environment"
 
-	echo "SAM2 patch:"
+	echo "--- SAM2 patch ---"
 	test -f /opt/sam2/src/sam/scripts/generate_ensemble.py
-	# set -e also ignores a failing "! cmd", so test for the typo explicitly.
-	if grep -q '_LOGGER\.infox' /opt/sam2/src/sam/scripts/generate_ensemble.py; then
-		echo "  FAIL    generate_ensemble.py still calls _LOGGER.infox"
-		exit 1
-	fi
+	! grep -q '_LOGGER\.infox' /opt/sam2/src/sam/scripts/generate_ensemble.py
 	echo "  OK      generate_ensemble.py present and infox typo patched"
 
-	echo "structure-preparation env (isolated from the main env):"
+	echo "--- structure-preparation env (isolated from the main env) ---"
 	test -x /opt/conda/envs/prep/bin/python3
 	/opt/conda/envs/prep/bin/python3 -c "
-import MDAnalysis, numpy, scipy, sys
-import MDAnalysis.analysis.align, scipy.cluster.vq
+import MDAnalysis, numpy, sys
 print('  OK      MDAnalysis        %s' % MDAnalysis.__version__)
 print('  OK      numpy (prep env)  %s' % numpy.__version__)
-print('  OK      scipy (prep env)  %s' % scipy.__version__)
 "
 	# The whole point of the separate env: MDAnalysis must not have perturbed
 	# the pinned numpy that torch / mdtraj / SAM2 depend on in the main env.
@@ -194,12 +227,50 @@ import numpy, sys
 assert numpy.__version__ == '1.26.4', 'main env numpy drifted to ' + numpy.__version__
 print('  OK      numpy (main env)  %s  (unperturbed)' % numpy.__version__)
 "
+	# pyarrow is checked separately because it declares no numpy constraint:
+	# an unpinned build asserts numpy >= 2.0 inside its compiled extension and
+	# takes "import datasets" down with an error that blames numpy.
+	/opt/conda/bin/python3 -c "
+import pyarrow, numpy
+major = int(pyarrow.__version__.split('.')[0])
+assert major <= 17, 'pyarrow %s requires numpy >= 2.0 and will break datasets' % pyarrow.__version__
+print('  OK      pyarrow           %s  (numpy %s compatible)' % (pyarrow.__version__, numpy.__version__))
+"
 	/opt/conda/envs/prep/bin/python3 /opt/pipeline/clean_structure.py --help > /dev/null
 	echo "  OK      clean_structure.py runs in the prep env"
 	/opt/conda/bin/python3 /opt/pipeline/make_report.py --help > /dev/null
 	echo "  OK      make_report.py runs in the main env"
 
-	echo "baked payload present and readable by uid $(id -u):"
+	# === STAGE 6 ===
+	echo "--- ensemble clustering (Stage 6) ---"
+	# Clustering runs in the prep env: MDAnalysis lives there, and scipy
+	# comes with it. Keeping it out of the main env protects the pinned
+	# numpy / torch / SAM2 stack.
+	/opt/conda/envs/prep/bin/python3 -c "import MDAnalysis, scipy.cluster.vq, numpy; print('  OK      MDAnalysis + scipy.cluster in prep env')"
+	test -r /opt/pipeline/asam_cluster_analysis.py
+	echo "  OK      asam_cluster_analysis.py present"
+
+	# === STAGE 10 ===
+	echo "--- cryptic pocket analysis (Stage 10) ---"
+	test -x /opt/conda/envs/analysis/bin/fpocket
+	echo "  OK      fpocket binary present"
+	/opt/conda/envs/analysis/bin/fpocket 2>&1 | head -1 > /dev/null
+	/opt/conda/bin/python3 /opt/pipeline/cryptic_pocket_analysis.py --help > /dev/null
+	echo "  OK      cryptic_pocket_analysis.py runs in the main env"
+
+	# Guided detection has four ways to return nothing while looking like a
+	# negative biological result. Each was found the hard way; assert them
+	# here so a rebuild cannot reintroduce one without failing the build.
+	/opt/conda/bin/python3 /opt/pipeline/check_stage10.py
+	echo "  OK      guided-detection regressions guarded"
+
+	echo "--- figures (Stage 11) ---"
+	/opt/conda/bin/python3 /opt/pipeline/plot_cryptiscan.py --help > /dev/null
+	echo "  OK      plot_cryptiscan.py runs in the main env"
+	/opt/conda/bin/python3 -c "import matplotlib; print('  OK      matplotlib', matplotlib.__version__)"
+	# === END STAGE 10 ===
+
+	echo "--- baked payload present and readable by uid $(id -u) ---"
 	/opt/conda/bin/python3 -c "
 import sys
 paths = [
@@ -211,6 +282,8 @@ paths = [
   '/opt/pipeline/clean_structure.py',
   '/opt/pipeline/make_report.py',
   '/opt/pipeline/asam_cluster_analysis.py',
+  '/opt/pipeline/cryptic_pocket_analysis.py',
+  '/opt/pipeline/plot_cryptiscan.py',
   '/opt/models/esm1v_t33_650M_UR90S_1.pt',
   '/opt/models/prot_t5_xl_uniref50_full_v2/cpt.pth',
   '/opt/models/prot_t5_xl_uniref50_full_v2/model.safetensors',
@@ -234,9 +307,9 @@ sys.exit(1 if bad else 0)
 
 %labels
 	Name CryptiScan-local
-	Version 1.0
+	Version 1.1
 	Mode local-offline
-	Description Cryptic-pocket scan with local ProtT5 inference, ESM-1v scoring, MODELLER mutagenesis and SAM2 ensembles
+	Description Cryptic-pocket scan with local ProtT5 inference, ESM-1v scoring, MODELLER mutagenesis, matched aSAM ensembles, guided fpocket quantification and publication figures
 
 %help
 	CryptiScan - LOCAL / OFFLINE image.

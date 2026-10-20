@@ -373,8 +373,84 @@ def build(workdir, jobname, container):
         out.append(" No ensemble found (SAM2 stage did not run or produced no output).")
     out.append("")
 
+    # ------------------------------------------------- pocket quantification
+    out.append(head("7. CRYPTIC POCKET QUANTIFICATION"))
+    pocket = read_json(workdir / "pocket_analysis" / "pocket_summary.json")
+    if not pocket:
+        out.append(" Not run (Stage 10 was disabled, or it failed).")
+    else:
+        res = pocket.get("cryptic_residues", [])
+        out.append(f" Cryptic residues (aSAM numbering) : "
+                   f"{', '.join(str(r) for r in res)}")
+        out.append(f" Detection                         : "
+                   f"{'fpocket -P (guided)' if pocket.get('guided') else 'unguided + matching'}")
+        out.append(f" fpocket -u                        : "
+                   f"{pocket.get('fpocket_min_explicit_u', '?')}")
+        out.append(f" fpocket build                     : "
+                   f"{pocket.get('fpocket_version', 'unknown')}")
+        out.append(f" Backbone-RMSD reference           : "
+                   f"{pocket.get('rmsd_reference', '?')}")
+        out.append("")
+
+        def pocket_block(tag, d):
+            if not d:
+                return
+            out.append(f" {tag}")
+            out.append(f"   frames analysed          : {d.get('n_frames', '?')}"
+                       + (f"   ({d['n_failed']} detector failures)"
+                          if d.get("n_failed") else ""))
+            of = d.get("open_fraction")
+            out.append(f"   pocket open              : {d.get('n_open', '?')}"
+                       + (f"  ({100 * of:.1f} %)" if isinstance(of, float) else ""))
+            out.append(f"   mean volume, all frames  : "
+                       f"{d.get('mean_volume_all', float('nan')):.1f} A^3")
+            out.append(f"   mean volume, open frames : "
+                       f"{d.get('mean_volume_open', float('nan')):.1f} A^3")
+            out.append(f"   cryptic-residue SASA     : "
+                       f"{d.get('mean_cryptic_sasa', float('nan')):.1f} A^2")
+            out.append(f"   non-cryptic pocket vol   : "
+                       f"{d.get('mean_noncryptic_volume', float('nan')):.1f} A^3")
+            out.append("")
+
+        pocket_block("WILD TYPE", pocket.get("wildtype"))
+        pocket_block("MUTANT", pocket.get("mutant"))
+
+        comp = pocket.get("comparison")
+        if comp:
+            out.append(" MUTANT vs WILD TYPE")
+            out.append(f"   delta mean volume        : "
+                       f"{comp.get('delta_mean_volume_A3', float('nan')):+.1f} A^3")
+            out.append(f"   fold change              : "
+                       f"{comp.get('fold_change_volume', float('nan')):.2f} x")
+            out.append(f"   delta open fraction      : "
+                       f"{100 * comp.get('delta_open_fraction', float('nan')):+.1f} pp")
+            if "cliffs_delta" in comp:
+                out.append(f"   Cliff's delta            : "
+                           f"{comp['cliffs_delta']:+.3f}   (effect size)")
+            out.append(f"   delta non-cryptic volume : "
+                       f"{comp.get('delta_noncryptic_volume_A3', float('nan')):+.1f} A^3"
+                       "   <-- specificity control")
+            out.append(f"   delta radius of gyration : "
+                       f"{comp.get('delta_rg_A', float('nan')):+.3f} A")
+            out.append("")
+            out.append(" A 'closed' frame is a result: the detector ran and found no")
+            out.append(" cavity. A 'detector failure' is a tool error and is counted")
+            out.append(" separately, so a broken detector can never be read as a")
+            out.append(" negative biological finding.")
+        else:
+            out.append(" No wild-type ensemble, so there is no reference. A pocket")
+            out.append(" volume on its own carries no meaning.")
+    out.append("")
+
+    figs = sorted((workdir / "figures").glob("*.pdf")) if (workdir / "figures").is_dir() else []
+    if figs:
+        out.append(f" Figures written : {len(figs)}")
+        for f in figs:
+            out.append(f"     {f.name}")
+        out.append("")
+
     # ---------------------------------------------------------------- files
-    out.append(head("7. FILES IN THIS ARCHIVE"))
+    out.append(head("8. FILES IN THIS ARCHIVE"))
     for f in sorted(workdir.rglob("*")):
         if f.is_file():
             out.append(f"   {str(f.relative_to(workdir)):<44} {f.stat().st_size:>12,} B")
