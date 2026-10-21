@@ -47,7 +47,7 @@ cd CryptiScan
 The weights are too large for GitHub and are archived on Zenodo ([10.5281/zenodo.23507674](https://doi.org/10.5281/zenodo.23507674)).
 
 ```bash
-wget -O cryptiscan_weights.zip "https://zenodo.org/records/XXXXXXX/files/cryptiscan_weights.zip?download=1"
+wget -O cryptiscan_weights.zip "https://zenodo.org/records/23507674/files/cryptiscan_weights.zip?download=1"
 md5sum cryptiscan_weights.zip     # should match: <MD5 from Zenodo>
 unzip -o cryptiscan_weights.zip   # fills required_files_weights/
 ```
