@@ -15,13 +15,18 @@ their own licences. Their notices are retained inside the image.
 | MDTraj | 1.10.3 | LGPL-2.1 | https://www.mdtraj.org |
 | PyTorch | 2.4.0+cu124 | BSD-3-Clause | https://pytorch.org |
 | NumPy, SciPy, pandas, Matplotlib | pinned in the image | BSD-3-Clause / PSF | respective projects |
-| MODELLER | 10.8 | proprietary, **not redistributed** | https://salilab.org/modeller |
+| OpenMM | conda-forge build, recorded in the image | MIT; CUDA and OpenCL platforms LGPL | https://openmm.org |
+| PDBFixer | conda-forge build, recorded in the image | MIT | https://github.com/openmm/pdbfixer |
 
-## MODELLER
+The exact OpenMM and PDBFixer builds are written to
+`/opt/pipeline/MUTATE_VERSION.txt` inside the image.
 
-MODELLER requires a personal academic licence key. The key is supplied at
-runtime through the `MODELLER_KEY` environment variable and is never written
-into the image. Register for your own key rather than reusing another user's.
+## Mutagenesis
+
+Earlier versions used MODELLER for the mutagenesis step. Its licence does not
+allow redistribution inside the image, so it was replaced by PDBFixer + OpenMM
+(`openmm_mutate.py`). The image contains no MODELLER code, and no licence key
+is required. `modeller_mutate.py` remains in the repository for reference only.
 
 ## MDAnalysis and the GPL
 

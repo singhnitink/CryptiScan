@@ -6,7 +6,7 @@
 *.sif
 *.simg
 *.sandbox/
-
+Elsevier_Physics_Open_journal_template/
 # Machine Learning Models & Weights (Large binary files)
 *.pt
 *.pth
@@ -49,7 +49,7 @@ cryptic_sites_software
 ESM-Scan
 Mutation_pipeline
 sam
-
+pipeline/1j*
 # Large Compressed Archives & Installers
 *.zip
 *.tar

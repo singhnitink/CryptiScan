@@ -1,16 +1,16 @@
 # CryptiScan Pipeline
 
-End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v and MODELLER, and generating conformational ensembles with SAM2.
+End-to-end pipeline for predicting cryptic binding sites, designing point mutations with ESM-1v, building them with PDBFixer + OpenMM, generating matched mutant and wild-type conformational ensembles with SAM2, and quantifying the cryptic pocket with fpocket.
 
 ```mermaid
 flowchart TB
     subgraph row1 [" "]
         direction LR
-        A([PDB / .pdb]) --> B[Fetch + Cleanup] --> C[Chain Selection] --> D[Cryptic Prediction] --> E[ESM-Scan] --> F[MODELLER Mutagenesis]
+        A([PDB / .pdb]) --> B[Fetch + Cleanup] --> C[Chain Selection] --> D[Cryptic Prediction] --> E[ESM-Scan] --> F[Mutagenesis<br/>PDBFixer + OpenMM]
     end
     subgraph row2 [" "]
         direction LR
-        G[SAM2 Validation] --> H[Ensemble Generation] --> I[Clustering] --> J[Report + FASTA] --> K([Archive .zip])
+        G[SAM2 Validation] --> H[Mutant + WT Ensembles] --> I[Clustering] --> J[Pocket Quantification] --> K[Figures + Report] --> L([Archive .zip])
     end
     row1 --> row2
 ```
@@ -27,9 +27,8 @@ The pipeline runs fully locally inside an Apptainer container (`pipeline_local.s
 - **NVIDIA GPU** with driver ≥ 525
 - **Apptainer** (or Singularity), with `sudo` or `--fakeroot` rights for the one-time build
 - **~70 GB free disk space** for the build, and internet access during the build
-- **MODELLER license key** (free academic license at [salilab.org](https://salilab.org/modeller/registration.html))
 
-CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5-XL, MODELLER 10.8, and SAM2 are all installed inside the container during the build.
+No licence keys are needed. CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5-XL, SAM2, PDBFixer + OpenMM, and fpocket are all installed inside the container during the build.
 
 ---
 
@@ -39,8 +38,10 @@ CUDA 12.5, PyTorch 2.4, ESM-1v, ProtT5-XL, MODELLER 10.8, and SAM2 are all insta
 
 ```bash
 git clone https://github.com/singhnitink/CryptiScan.git
-cd CryptiScan
+cd CryptiScan/pipeline
 ```
+
+Run every command below from this `pipeline/` directory.
 
 ### 2. Download the model weights (~15 GB) from Zenodo
 
@@ -66,7 +67,9 @@ sudo apptainer build pipeline_local.sif pipeline_local.def
 chmod 0644 pipeline_local.sif
 ```
 
-Without `sudo`, use `apptainer build --fakeroot pipeline_local.sif pipeline_local.def` if your system allows it.
+Build from `pipeline/`: the recipe copies `../sample_output/2wgb.pdb` into the image as test data.
+
+Without `sudo`, use `apptainer build --fakeroot pipeline_local.sif pipeline_local.def` if your system allows it. To replace an existing image, add `--force`.
 
 If `/tmp` is small, point the build to a larger disk:
 
@@ -74,7 +77,7 @@ If `/tmp` is small, point the build to a larger disk:
 sudo -E APPTAINER_TMPDIR=/path/to/large_disk apptainer build pipeline_local.sif pipeline_local.def
 ```
 
-Verify the image:
+The build ends by running the image's self-tests, which include two real point mutations (F121R, G124R) on the 2WGB sample chain. Re-run them at any time with:
 
 ```bash
 apptainer test pipeline_local.sif
@@ -83,7 +86,6 @@ apptainer test pipeline_local.sif
 ### 4. Run
 
 ```bash
-export MODELLER_KEY="your_key"
 bash launch_pipeline_local.sh
 ```
 
@@ -105,13 +107,12 @@ MUTATION_SET="charged_polar"   # Candidate pool: charged_polar | charged | polar
 N_CLUSTERS=10                  # Number of clusters for SAM2 ensemble
 PCA_DIM=10                     # Number of PCA components for clustering
 JOBNAME="${JOBNAME:-1jwp}"     # Output folder prefix
-MODELLER_KEY="$MODELLER_KEY"  # Sali Lab MODELLER license key
 ```
 
-Parameters can also be passed as environment variables:
+`JOBNAME` can also be passed as an environment variable:
 
 ```bash
-JOBNAME=1lzt MODELLER_KEY="your_key" bash launch_pipeline_local.sh
+JOBNAME=1lzt bash launch_pipeline_local.sh
 ```
 
 Before running stage 1, the launcher validates that `pipeline_local.sif` exists, matches required dependencies, and has readable weights.
@@ -131,13 +132,17 @@ Results are packaged into `<jobname>_<timestamp>.zip`:
 ├── 1jwp.pdb                         Target chain used for all pipeline stages
 ├── 1JWP_A_cryptic.json              Predicted cryptic residue positions and probabilities
 ├── 1jwp_esm_summary.csv             ESM scores for tested substitutions
-├── 1jwp_top5_esm_mutant.pdb         Relaxed MODELLER mutant structure
+├── 1jwp_top5_esm_mutant.pdb         Relaxed mutant structure (PDBFixer + OpenMM)
+├── mutate_<RES><num>.log            Per-mutation log: energies, mobile atoms, fixed-atom drift
 ├── sam2_input.pdb                   Structure validated for SAM2
-├── ensemble_output.*                SAM2 conformational ensemble trajectory and topology
+├── ensemble_output.*                SAM2 ensemble of the MUTANT (trajectory and topology)
+├── wt_ensemble.*                    Matched SAM2 ensemble of the WILD TYPE (same settings)
 ├── ensemble_clusters/
 │   ├── clustering/cluster_representatives.dcd   Representative frame per cluster
 │   ├── clustering/cluster_representatives.json  Cluster assignments and population counts
 │   └── cluster_meta.sh              Summary counts
+├── pocket_analysis/                 Per-frame cryptic-pocket volumes for both ensembles (fpocket)
+├── figures/                         Figures and statistics table (stats_summary.csv)
 ├── 1JWP_manifest.json               Run metadata and configuration snapshot
 ├── 1jwp_local_report.txt            Plaintext summary of the run
 ├── 1JWP_A_wildtype.fasta            Wild-type sequence of the target chain
@@ -148,7 +153,8 @@ Results are packaged into `<jobname>_<timestamp>.zip`:
 
 - **Cleanup:** Non-standard residues, water molecules, and alternate atom locations are processed with MDAnalysis. Ligands are saved individually in `<pdb>_ligands/` for reference.
 - **Chain isolation:** Downstream steps run strictly on the single designated chain (`CHAIN`). Isolating the chain prevents multi-chain coordinate flattening during SAM2 simulation.
-- **SAM2 pre-check:** Before running conformational sampling, stage 5b verifies standard atom naming, chain consistency, and CA completeness on the MODELLER output.
+- **Mutagenesis:** PDBFixer swaps the residue and builds the new side chain; any heavy atoms missing elsewhere in the chain are rebuilt too. OpenMM then relaxes the structure (Amber14 force field, GBn2 implicit solvent): minimise, anneal 300 → 600 → 300 K, minimise again. Only the side chains of the mutated (and rebuilt) residues and the hydrogens move; the backbone and every other atom stay fixed. Hydrogens are removed before writing, chain IDs and residue numbers are kept, and a fixed random seed makes runs reproducible. In `combined` mode mutations are applied one after another, each relaxed in the presence of the previous ones.
+- **SAM2 pre-check:** Before running conformational sampling, stage 5b verifies standard atom naming, chain consistency, and CA completeness on the mutant structure.
 
 ---
 
@@ -164,22 +170,28 @@ Results are packaged into `<jobname>_<timestamp>.zip`:
 
 ### Container Scripts & Environments
 
-The container uses two isolated Python environments to prevent dependency conflicts between MDTraj/PyTorch and MDAnalysis:
+The container uses four isolated Python environments, so that no tool's dependencies can move the pinned PyTorch / MDTraj / NumPy stack:
 
 | Environment | Path | Packages |
 |---|---|---|
-| `main` | `/opt/conda` | PyTorch 2.4 (CUDA 12.4), ESM-1v, ProtT5, MODELLER 10.8, SAM2, MDTraj (`numpy==1.26.4`) |
+| `main` | `/opt/conda` | PyTorch 2.4 (CUDA 12.4), ESM-1v, ProtT5, SAM2, MDTraj (`numpy==1.26.4`) |
 | `prep` | `/opt/conda/envs/prep` | MDAnalysis 2.7.0, SciPy (used for structure cleanup and clustering) |
+| `mutate` | `/opt/conda/envs/mutate` | PDBFixer + OpenMM from conda-forge (exact versions recorded in `/opt/pipeline/MUTATE_VERSION.txt`) |
+| `analysis` | `/opt/conda/envs/analysis` | fpocket (build recorded in `/opt/pipeline/FPOCKET_VERSION.txt`) |
 
 #### Core scripts in `required_files_weights/`:
-- `run_pipeline.py`: Orchestrates stages 1 through 4.
+- `run_pipeline.py`: Orchestrates stages 1 through 6.
 - `predict_cryptic_local.py`: Local ProtT5 cryptic pocket predictor.
 - `cryptobank_model_loader.py`: Classification head architecture for ProtT5 embeddings.
 - `esm_scanner.py`: ESM-1v in silico mutagenesis scanner.
-- `modeller_mutate.py`: Point mutation insertion and sidechain minimization with MODELLER.
+- `openmm_mutate.py`: Point mutation with PDBFixer and side-chain relaxation with OpenMM.
 - `clean_structure.py`: MDAnalysis structure parsing and chain isolation.
 - `asam_cluster_analysis.py`: PCA and k-means clustering of SAM2 trajectories.
+- `cryptic_pocket_analysis.py`: Guided fpocket quantification of the cryptic pocket in both ensembles.
+- `plot_cryptiscan.py`: Figures and statistics.
 - `make_report.py`: Generates the summary report and FASTA files.
+
+`modeller_mutate.py` is the earlier MODELLER-based mutagenesis step. It is kept for reference only and is not part of the image.
 
 ---
 
@@ -212,21 +224,17 @@ Alternatively, download them from the original sources:
 bash download_weights.sh
 ```
 
-This script verifies file integrity using SHA-256 checksums and automatically resumes interrupted downloads.
+The script skips files that are already present and retries a failed download up to three times.
 
 ---
 
-## Notes on File Permissions & License
+## Notes on File Permissions & Licences
 
 1. **Executable bit:** If files are transferred via cloud storage (e.g., OneDrive or Google Drive), the executable bit may be stripped. Re-enable it with:
    ```bash
    chmod +x launch_pipeline_local.sh download_weights.sh
    ```
-2. **MODELLER license:** MODELLER requires an academic license key. Set your key before running:
-   ```bash
-   export MODELLER_KEY="your_key"
-   ```
-   or edit `MODELLER_KEY` directly in `launch_pipeline_local.sh`.
+2. **Licences:** Every component in the image is redistributable, so no licence key or registration is required. See [THIRD_PARTY.md](THIRD_PARTY.md) for the licence of each component.
 
 ---
 

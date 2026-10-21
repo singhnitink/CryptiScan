@@ -274,7 +274,9 @@ def build(workdir, jobname, container):
     out.append("")
 
     # ----------------------------------------------------------- mutagenesis
-    out.append(head("4. IN SILICO MUTAGENESIS (MODELLER)"))
+    # Manifests written before the field existed were all built with MODELLER.
+    engine = manifest.get("mutation_engine", "MODELLER")
+    out.append(head(f"4. IN SILICO MUTAGENESIS ({engine})"))
     mode = manifest.get("mode", "?")
     n_scored = manifest.get("n_residues_scored")
     n_mut = manifest.get("n_residues_mutated")

@@ -22,7 +22,7 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	required_files_weights/cryptobank_model_loader.py /opt/pipeline/cryptobank_model_loader.py
 	required_files_weights/scrape_cryptobank.py /opt/pipeline/scrape_cryptobank.py
 	required_files_weights/esm_scanner.py /opt/pipeline/esm_scanner.py
-	required_files_weights/modeller_mutate.py /opt/pipeline/modeller_mutate.py
+	required_files_weights/openmm_mutate.py /opt/pipeline/openmm_mutate.py
 	required_files_weights/clean_structure.py /opt/pipeline/clean_structure.py
 	required_files_weights/make_report.py /opt/pipeline/make_report.py
 	# === STAGE 6 === ensemble clustering
@@ -32,6 +32,9 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	# === STAGE 11 === figures and statistics
 	required_files_weights/plot_cryptiscan.py /opt/pipeline/plot_cryptiscan.py
 	required_files_weights/check_stage10.py /opt/pipeline/check_stage10.py
+	# Stage-2 chain from the sample run; %test mutates it to prove the
+	# mutagenesis env works end to end. Path is relative to pipeline/.
+	../sample_output/2wgb.pdb /opt/pipeline/testdata/2wgb.pdb
 
 	# Model weights -> /opt/models and /opt/sam2_weights
 	# NOTE: the ProtT5 destination name must keep the substring "prot_t5" --
@@ -56,26 +59,6 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	/opt/conda/bin/conda config --set auto_activate_base false
 	/opt/conda/bin/conda config --set solver classic
 	/opt/conda/bin/conda config --add channels defaults
-
-	# MODELLER: install from salilab channel (license key supplied at runtime via KEY_MODELLER)
-	/opt/conda/bin/conda install -y salilab::modeller
-
-	# Configure Modeller config.py to read the license key from the environment at runtime
-	/opt/conda/bin/python3 -c "
-import glob, os
-configs = glob.glob('/opt/conda/lib/modeller-*/modlib/modeller/config.py')
-for f in configs:
-    with open(f, 'r') as fp:
-        lines = fp.readlines()
-    with open(f, 'w') as fp:
-        fp.write('import os\n')
-        for line in lines:
-            if 'license =' in line:
-                fp.write(\"license = os.environ.get('KEY_MODELLER', os.environ.get('KEY_MODELLER10v8', 'XXXX'))\n\")
-            else:
-                fp.write(line)
-    print('Configured dynamic runtime license in:', f)
-"
 
 	# --------------------------------------------------------------------------
 	# Python stack. Every version is pinned: an unpinned build drifts (an earlier
@@ -156,6 +139,18 @@ for f in configs:
 	/opt/conda/envs/analysis/bin/fpocket 2>&1 | head -1 \
 		> /opt/pipeline/FPOCKET_VERSION.txt || true
 	# === END STAGE 10 ===
+
+	# === STAGE 5 ===
+	# PDBFixer + OpenMM for mutagenesis (replaces MODELLER, whose licence does
+	# not allow it to be redistributed inside this image). Own env for the
+	# same reason as prep/analysis; pdbfixer pulls in openmm. Unpinned, so the
+	# exact build is recorded: the relaxed side chains depend on the force
+	# field files that ship with openmm.
+	/opt/conda/bin/conda create -y -n mutate -c conda-forge --override-channels \
+		python=3.12 pdbfixer
+	/opt/conda/bin/conda list -n mutate '^(openmm|pdbfixer)$' \
+		> /opt/pipeline/MUTATE_VERSION.txt
+	# === END STAGE 5 ===
 	/opt/conda/bin/conda clean -y --all
 
 	# --------------------------------------------------------------------------
@@ -174,9 +169,9 @@ for f in configs:
 	export PATH=/opt/conda/bin:$PATH
 	export ESM_MODEL=/opt/models/esm1v_t33_650M_UR90S_1.pt
 	export PROT_T5_MODEL=/opt/models/prot_t5_xl_uniref50_full_v2
-	export MODINSTALL10v8=/opt/conda/lib/modeller-10.8
 	export SAM_WEIGHTS_PATH=/opt/sam2_weights
 	export PREP_PYTHON=/opt/conda/envs/prep/bin/python3
+	export MUTATE_PYTHON=/opt/conda/envs/mutate/bin/python3
 	# === STAGE 10 ===
 	export FPOCKET_BIN=/opt/conda/envs/analysis/bin/fpocket
 	# Fail loudly on a missing local weight file instead of silently reaching
@@ -201,12 +196,48 @@ for m in mods:
         print('  MISSING %-18s (%s)' % (m, type(e).__name__)); bad.append(m)
 sys.exit(1 if bad else 0)
 "
-	echo "--- MODELLER install ---"
-	# Not an "import modeller" check: that would validate the licence key, which
-	# is only supplied at run time. Verify the install and the config patch.
-	test -d /opt/conda/lib/modeller-10.8 && echo "  OK      /opt/conda/lib/modeller-10.8"
-	grep -q "KEY_MODELLER" /opt/conda/lib/modeller-10.8/modlib/modeller/config.py \
-		&& echo "  OK      config.py reads the licence key from the environment"
+	echo "--- mutagenesis env (Stage 5, PDBFixer + OpenMM) ---"
+	test -x /opt/conda/envs/mutate/bin/python3
+	/opt/conda/envs/mutate/bin/python3 -c "
+import openmm, pdbfixer
+from openmm import app
+app.ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+print('  OK      openmm            %s' % openmm.__version__)
+print('  OK      amber14 + GBn2 force field loads')
+"
+	# A real mutation, run the way run_pipeline.py runs it: two in sequence,
+	# as combined mode does. GLY124 -> ARG also has to build a CB from nothing.
+	MUT_TMP=$(mktemp -d)
+	cp /opt/pipeline/testdata/2wgb.pdb "$MUT_TMP/"
+	(cd "$MUT_TMP" \
+		&& /opt/conda/envs/mutate/bin/python3 /opt/pipeline/openmm_mutate.py 2wgb 121 ARG A > mut1.log 2>&1 \
+		&& /opt/conda/envs/mutate/bin/python3 /opt/pipeline/openmm_mutate.py 2wgbARG121 124 ARG A > mut2.log 2>&1) \
+		|| { cat "$MUT_TMP"/mut*.log; exit 1; }
+	/opt/conda/envs/mutate/bin/python3 -c "
+import sys
+import numpy as np
+from openmm import app, unit
+wt  = app.PDBFile(sys.argv[1])
+mut = app.PDBFile(sys.argv[2])
+key = lambda r: (r.chain.id, r.id)
+w = {key(r): r for r in wt.topology.residues()}
+m = {key(r): r for r in mut.topology.residues()}
+# Stage 10 maps the ensembles by these, so they must survive mutagenesis.
+assert list(w) == list(m), 'chain IDs / residue numbers changed'
+for resid in ('121', '124'):
+    r = m[('A', resid)]
+    names = {a.name for a in r.atoms()}
+    assert r.name == 'ARG' and {'CB', 'CZ', 'NH1', 'NH2'} <= names, 'ARG%s incomplete: %s' % (resid, sorted(names))
+assert not any(a.element.symbol == 'H' for a in mut.topology.atoms()), 'hydrogens left in output'
+# The backbone is held fixed, so every CA must sit exactly where it was.
+def ca(pdb):
+    xyz = pdb.getPositions(asNumpy=True).value_in_unit(unit.angstrom)
+    return np.array([xyz[a.index] for a in pdb.topology.atoms() if a.name == 'CA'])
+shift = np.abs(ca(mut) - ca(wt)).max()
+assert shift < 0.01, 'backbone moved by %.3f A' % shift
+print('  OK      F121R + G124R built, numbering kept, CA shift %.4f A' % shift)
+" /opt/pipeline/testdata/2wgb.pdb "$MUT_TMP/2wgbARG121ARG124.pdb"
+	rm -rf "$MUT_TMP"
 
 	echo "--- SAM2 patch ---"
 	test -f /opt/sam2/src/sam/scripts/generate_ensemble.py
@@ -278,7 +309,8 @@ paths = [
   '/opt/pipeline/predict_cryptic_local.py',
   '/opt/pipeline/cryptobank_model_loader.py',
   '/opt/pipeline/esm_scanner.py',
-  '/opt/pipeline/modeller_mutate.py',
+  '/opt/pipeline/openmm_mutate.py',
+  '/opt/pipeline/MUTATE_VERSION.txt',
   '/opt/pipeline/clean_structure.py',
   '/opt/pipeline/make_report.py',
   '/opt/pipeline/asam_cluster_analysis.py',
@@ -307,9 +339,9 @@ sys.exit(1 if bad else 0)
 
 %labels
 	Name CryptiScan-local
-	Version 1.1
+	Version 1.2
 	Mode local-offline
-	Description Cryptic-pocket scan with local ProtT5 inference, ESM-1v scoring, MODELLER mutagenesis, matched aSAM ensembles, guided fpocket quantification and publication figures
+	Description Cryptic-pocket scan with local ProtT5 inference, ESM-1v scoring, PDBFixer/OpenMM mutagenesis, matched aSAM ensembles, guided fpocket quantification and publication figures
 
 %help
 	CryptiScan - LOCAL / OFFLINE image.
@@ -323,8 +355,9 @@ sys.exit(1 if bad else 0)
 
 	    bash launch_pipeline_local.sh
 
-	Edit PDB / CHAIN / TOP / MODE / MODELLER_KEY at the top of that script. The
-	launcher deliberately passes no --bind flags; everything is inside the image.
+	Edit PDB / CHAIN / TOP / MODE at the top of that script. No licence key is
+	needed. The launcher deliberately passes no --bind flags; everything is
+	inside the image.
 
 	Baked-in paths:
 	    /opt/pipeline/                                driver scripts
@@ -332,5 +365,6 @@ sys.exit(1 if bad else 0)
 	    /opt/models/prot_t5_xl_uniref50_full_v2/      ProtT5 + classifier head
 	    /opt/sam2_weights/weights/mdcath_1.0/         SAM2 weights
 	    /opt/conda/bin/python3                        interpreter
+	    /opt/conda/envs/mutate/bin/python3            PDBFixer + OpenMM (Stage 5)
 
 	Verify the image with:  apptainer test pipeline_local.sif

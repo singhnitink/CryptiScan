@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CryptoBank -> ESM-Scan -> MODELLER Pipeline Orchestrator
-=========================================================
+CryptoBank -> ESM-Scan -> Mutagenesis Pipeline Orchestrator
+===========================================================
 Stages:
     1.  clean_structure.py  : Fetch the entry from RCSB and split it with
                               MDAnalysis. Keeps BOTH the full protein
@@ -14,7 +14,8 @@ Stages:
     4.  esm_scanner.py      : Run ESM-Scan (ESM-1v zero-shot variant scoring) on
                               the top cryptic residues to find the best amino acid
                               mutation for each position (highest fitness score).
-    5.  modeller_mutate.py  : Build the relaxed 3D mutant structure using MODELLER.
+    5.  openmm_mutate.py    : Build the relaxed 3D mutant structure with PDBFixer +
+                              OpenMM (modeller_mutate.py is still accepted).
     5b. clean_structure.py  : Validate the mutant for SAM2 -> sam2_input.pdb.
     6.  manifest.json       : Manifest describing the run, ready for the
                               SAM2 / aSAM ensemble stage.
@@ -42,12 +43,11 @@ VALID_AA3 = {
     'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL',
 }
 
-# Auto-detect MODELLER install directory if not explicitly passed
-if "MODINSTALL10v8" not in os.environ:
-    import glob
-    _mod_dirs = glob.glob("/opt/conda/lib/modeller-*")
-    if _mod_dirs:
-        os.environ["MODINSTALL10v8"] = _mod_dirs[0]
+# Recorded in the manifest so the report names the method that built the mutant.
+MUTATION_ENGINES = {
+    "openmm_mutate.py": "PDBFixer + OpenMM",
+    "modeller_mutate.py": "MODELLER",
+}
 
 
 def log(msg):
@@ -127,7 +127,7 @@ def fetch_and_split(pdb, workdir, do_clean, prep_script, prep_python):
 def select_chain(protein_all, chain, pdb, workdir, do_clean, prep_script, prep_python):
     """STAGE 2. Reduces the structure to the single chain the user selected and
     validates it (standard residues only, every residue has a CA). This one
-    chain is what CryptoBank, ESM-Scan, MODELLER and SAM2 all operate on."""
+    chain is what CryptoBank, ESM-Scan, mutagenesis and SAM2 all operate on."""
     dest = workdir / f"{pdb.lower()}.pdb"
     if dest.exists():
         log(f"Stage 2: using existing {dest.name} (not overwriting)")
@@ -148,7 +148,7 @@ def select_chain(protein_all, chain, pdb, workdir, do_clean, prep_script, prep_p
 
 
 def validate_for_sam2(mutant_pdb, chain, workdir, prep_script, prep_python):
-    """Re-checks the MODELLER output against SAM2's requirements before the
+    """Re-checks the mutant structure against SAM2's requirements before the
     ensemble stage. The structure is already single-chain by this point, so
     this is a validation pass rather than a filter."""
     dest = workdir / "sam2_input.pdb"
@@ -273,28 +273,29 @@ def run_esm_scan(pdb_file, chain, residues, workdir, esm_script, esm_model, esm_
 
 
 # ---------------------------------------------------------------------------
-# STAGE 4: MODELLER mutations
+# STAGE 5: mutagenesis
 # ---------------------------------------------------------------------------
-def run_modeller(modeller_script, base, respos, restyp, chain, workdir, modeller_python):
-    """Executes modeller_mutate.py to introduce a single mutation and refine sidechain."""
-    cmd = [modeller_python, str(modeller_script), base, str(respos), restyp, chain]
-    logf = workdir / f"modeller_{restyp}{respos}.log"
+def run_mutate(mutate_script, base, respos, restyp, chain, workdir, mutate_python):
+    """Executes the mutagenesis script (openmm_mutate.py or modeller_mutate.py;
+    both take the same arguments) to introduce one mutation and relax its side chain."""
+    cmd = [mutate_python, str(mutate_script), base, str(respos), restyp, chain]
+    logf = workdir / f"mutate_{restyp}{respos}.log"
     log(f"  mutate {chain}/{respos} -> {restyp}   (log: {logf.name})")
     with open(logf, "w") as lf:
         subprocess.run(cmd, cwd=str(workdir), check=True, stdout=lf, stderr=subprocess.STDOUT)
     out = workdir / f"{base}{restyp}{respos}.pdb"
     if not out.exists():
-        raise FileNotFoundError(f"MODELLER did not produce {out} (see {logf})")
+        raise FileNotFoundError(f"{Path(mutate_script).name} did not produce {out} (see {logf})")
     return out
 
 
-def mutate_independent(modeller_script, pdb_base, residues, chain, workdir, modeller_python):
+def mutate_independent(mutate_script, pdb_base, residues, chain, workdir, mutate_python):
     """Builds N separate single-point mutant structures."""
     mutants = []
     for r in residues:
         respos, wt, target_mut = r["resid"], r["resname_3letter"], r["target_mut"]
-        out = run_modeller(modeller_script, pdb_base, respos, target_mut, chain,
-                           workdir, modeller_python)
+        out = run_mutate(mutate_script, pdb_base, respos, target_mut, chain,
+                         workdir, mutate_python)
         canonical = workdir / f"{pdb_base}_{wt}{respos}{target_mut}.pdb"
         shutil.move(str(out), str(canonical))
         mutants.append({
@@ -310,14 +311,14 @@ def mutate_independent(modeller_script, pdb_base, residues, chain, workdir, mode
     return mutants
 
 
-def mutate_combined(modeller_script, pdb_base, residues, chain, workdir, modeller_python, n, suffix="esm"):
+def mutate_combined(mutate_script, pdb_base, residues, chain, workdir, mutate_python, n, suffix="esm"):
     """Applies ALL mutations sequentially into ONE combined structure."""
     current_base = pdb_base
     applied = []
     for i, r in enumerate(residues, 1):
         respos, wt, target_mut = r["resid"], r["resname_3letter"], r["target_mut"]
-        out = run_modeller(modeller_script, current_base, respos, target_mut, chain,
-                           workdir, modeller_python)
+        out = run_mutate(mutate_script, current_base, respos, target_mut, chain,
+                         workdir, mutate_python)
         rolling = workdir / f"{pdb_base}_step{i}.pdb"
         shutil.move(str(out), str(rolling))
         current_base = rolling.stem
@@ -352,7 +353,7 @@ def mutate_combined(modeller_script, pdb_base, residues, chain, workdir, modelle
 # ---------------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser(
-        description="CryptoBank -> ESM-Scan -> MODELLER pipeline orchestrator",
+        description="CryptoBank -> ESM-Scan -> mutagenesis pipeline orchestrator",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--pdb", required=True, help="Target PDB code (e.g. 1JWP)")
     p.add_argument("--chain", default="A", help="Target chain ID (default: A)")
@@ -379,13 +380,16 @@ def main():
                    help="combined = ONE file with all mutations (default); "
                         "independent = N separate mutants")
     p.add_argument("--no_clean", action="store_true",
-                   help="Feed the raw downloaded PDB to MODELLER (skip auto-cleaning)")
+                   help="Feed the raw downloaded PDB to mutagenesis (skip auto-cleaning)")
     p.add_argument("--workdir", default="pipeline_out")
     
     # Scripts & Models
     p.add_argument("--scraper", default="scrape_cryptobank.py")
     p.add_argument("--esm_script", default="esm_scanner.py")
-    p.add_argument("--modeller_script", default="modeller_mutate.py")
+    # --modeller_* spellings are kept so older launchers still run.
+    p.add_argument("--mutate_script", "--modeller_script", dest="mutate_script",
+                   default="openmm_mutate.py",
+                   help="Mutagenesis script: openmm_mutate.py (default) or modeller_mutate.py")
     p.add_argument("--prep_script", default="clean_structure.py",
                    help="MDAnalysis structure-preparation script")
     p.add_argument("--esm_model",
@@ -398,19 +402,21 @@ def main():
     p.add_argument("--esm_python",
                    default="/opt/conda/bin/python3",
                    help="Python interpreter with torch & esm")
-    p.add_argument("--modeller_python", default="/opt/conda/bin/python3",
-                   help="Python interpreter with MODELLER")
+    p.add_argument("--mutate_python", "--modeller_python", dest="mutate_python",
+                   default="/opt/conda/envs/mutate/bin/python3",
+                   help="Python interpreter for --mutate_script (PDBFixer + OpenMM env)")
     p.add_argument("--prep_python", default="/opt/conda/envs/prep/bin/python3",
                    help="Python interpreter with MDAnalysis (separate conda env)")
     
     p.add_argument("--check_numbering", action="store_true")
-    p.add_argument("--skip_modeller", action="store_true")
+    p.add_argument("--skip_mutate", "--skip_modeller", dest="skip_mutate", action="store_true")
     args = p.parse_args()
 
     # Resolve paths
     scraper_path = Path(args.scraper).resolve()
     esm_script_path = Path(args.esm_script).resolve()
-    modeller_path = Path(args.modeller_script).resolve()
+    mutate_path = Path(args.mutate_script).resolve()
+    engine = MUTATION_ENGINES.get(mutate_path.name, mutate_path.name)
     prep_path = Path(args.prep_script).resolve()
     workdir = Path(args.workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -422,7 +428,7 @@ def main():
                                   prep_python=args.prep_python)
 
     # Stage 2: chain selection. Everything downstream -- CryptoBank, ESM-Scan,
-    # MODELLER and SAM2 -- works on this single chain.
+    # mutagenesis and SAM2 -- works on this single chain.
     pdb_file = select_chain(protein_all, args.chain, args.pdb, workdir,
                             do_clean=not args.no_clean,
                             prep_script=prep_path,
@@ -484,19 +490,19 @@ def main():
         log(f"WARNING: {args.top} mutations requested but only {len(to_mutate)} residues "
             f"in chain {args.chain} can be mutated.")
 
-    # Stage 5: MODELLER mutagenesis
+    # Stage 5: mutagenesis
     mutants = []
-    if not args.skip_modeller:
-        log(f"Stage 5: MODELLER ({args.mode} mode)")
+    if not args.skip_mutate:
+        log(f"Stage 5: {engine} ({args.mode} mode)")
         if args.mode == "combined":
-            mutants = mutate_combined(modeller_path, pdb_base, to_mutate,
-                                      args.chain, workdir, args.modeller_python,
+            mutants = mutate_combined(mutate_path, pdb_base, to_mutate,
+                                      args.chain, workdir, args.mutate_python,
                                       len(to_mutate), suffix=suffix)
         else:
-            mutants = mutate_independent(modeller_path, pdb_base, to_mutate,
-                                         args.chain, workdir, args.modeller_python)
+            mutants = mutate_independent(mutate_path, pdb_base, to_mutate,
+                                         args.chain, workdir, args.mutate_python)
     else:
-        log("Stage 5: skipped (--skip_modeller)")
+        log("Stage 5: skipped (--skip_mutate)")
 
     # Stage 5b: validate the mutant before the ensemble stage.
     # In "combined" mode there is one entry; in "independent" mode the last
@@ -515,6 +521,7 @@ def main():
         "pdb": args.pdb,
         "chain": args.chain,
         "mode": args.mode,
+        "mutation_engine": engine,
         "strategy": args.strategy,
         "mutation_set": args.mutation_set if args.strategy == "esm" else None,
         "score_type": args.score_type,

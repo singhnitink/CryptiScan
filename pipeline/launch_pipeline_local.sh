@@ -11,7 +11,7 @@
 #    3. Verify backbone continuity and standard residues
 #    4. Score per-residue crypticity locally with ProtT5 (no network call)
 #    5. Score substitutions with ESM-1v, restricted to charged/polar residues
-#    6. Build the relaxed mutant with MODELLER, then validate it for aSAM
+#    6. Build the relaxed mutant with PDBFixer + OpenMM, then validate it for aSAM
 #    7. Generate the MUTANT ensemble with aSAM
 #    8. Generate the matched WILD-TYPE ensemble with aSAM
 #    9. Cluster the mutant ensemble (PCA + k-means)
@@ -35,12 +35,8 @@ cd "$SCRIPT_DIR"
 # ==============================================================================
 # 1. USER CONFIGURATION  --  this is the only block you need to edit
 # ==============================================================================
-PDB="9YBR"                     # PDB accession code, or a path to a local .pdb
+PDB="1JWP"                     # PDB accession code, or a path to a local .pdb
 CHAIN="A"                      # chain to analyse
-
-# MODELLER needs a free academic key: https://salilab.org/modeller/registration.html
-# Paste it here, or export MODELLER_KEY in your shell.
-MODELLER_KEY="${MODELLER_KEY:-MODELIRANJE}"
 
 # ==============================================================================
 # 2. ADVANCED SETTINGS  --  defaults are the ones used in the paper
@@ -104,7 +100,7 @@ MAKE_FIGURES=true
 # ==============================================================================
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 WORKDIR="${JOBNAME}_${TIMESTAMP}"
-CONTAINER="${SCRIPT_DIR}/pipeline_local.sif"
+CONTAINER="${SCRIPT_DIR}/pipeline_local_openmm.sif"
 PDB_LOWER=$(echo "$PDB" | tr '[:upper:]' '[:lower:]')
 
 # ==============================================================================
@@ -117,12 +113,6 @@ elif command -v singularity &>/dev/null; then
 else
     echo "ERROR: neither Apptainer nor Singularity is installed."
     echo "       https://apptainer.org/docs/admin/main/installation.html"
-    exit 1
-fi
-
-if [ -z "$MODELLER_KEY" ]; then
-    echo "ERROR: MODELLER_KEY is empty. Set it in section 1."
-    echo "       Free academic key: https://salilab.org/modeller/registration.html"
     exit 1
 fi
 
@@ -141,7 +131,7 @@ for REQUIRED in \
     /opt/pipeline/predict_cryptic_local.py \
     /opt/pipeline/cryptobank_model_loader.py \
     /opt/pipeline/esm_scanner.py \
-    /opt/pipeline/modeller_mutate.py \
+    /opt/pipeline/openmm_mutate.py \
     /opt/pipeline/clean_structure.py \
     /opt/pipeline/make_report.py \
     /opt/pipeline/asam_cluster_analysis.py \
@@ -149,6 +139,7 @@ for REQUIRED in \
     /opt/pipeline/plot_cryptiscan.py \
     /opt/conda/envs/analysis/bin/fpocket \
     /opt/conda/envs/prep/bin/python3 \
+    /opt/conda/envs/mutate/bin/python3 \
     /opt/models/esm1v_t33_650M_UR90S_1.pt \
     /opt/models/prot_t5_xl_uniref50_full_v2/cpt.pth \
     /opt/sam2_weights/weights/mdcath_1.0/nn.gen.pt
@@ -172,14 +163,11 @@ echo " Workdir: $WORKDIR"
 echo "=========================================================="
 
 # ==============================================================================
-# STAGES 1-6: curate -> crypticity -> ESM-1v -> MODELLER -> validate
+# STAGES 1-6: curate -> crypticity -> ESM-1v -> mutagenesis -> validate
 # ==============================================================================
 echo
 echo "### Stages 1-6: curation, crypticity, ESM-1v scan, mutagenesis"
 $CONTAINER_RUNTIME exec --nv \
-    --env KEY_MODELLER="$MODELLER_KEY" \
-    --env KEY_MODELLER10v8="$MODELLER_KEY" \
-    --env MODINSTALL10v8="/opt/conda/lib/modeller-10.8" \
     --env PROT_T5_MODEL="/opt/models/prot_t5_xl_uniref50_full_v2" \
     "$CONTAINER" /opt/conda/bin/python3 /opt/pipeline/run_pipeline.py \
         --pdb "$PDB" \
@@ -191,12 +179,12 @@ $CONTAINER_RUNTIME exec --nv \
         --esm_model /opt/models/esm1v_t33_650M_UR90S_1.pt \
         --scraper /opt/pipeline/predict_cryptic_local.py \
         --esm_script /opt/pipeline/esm_scanner.py \
-        --modeller_script /opt/pipeline/modeller_mutate.py \
+        --mutate_script /opt/pipeline/openmm_mutate.py \
         --prep_script /opt/pipeline/clean_structure.py \
         --mutation_set "$MUTATION_SET" \
         --esm_python /opt/conda/bin/python3 \
         --prep_python /opt/conda/envs/prep/bin/python3 \
-        --modeller_python /opt/conda/bin/python3 \
+        --mutate_python /opt/conda/envs/mutate/bin/python3 \
         --scraper_python /opt/conda/bin/python3 \
         --check_numbering
 
@@ -234,7 +222,7 @@ fi
 # ==============================================================================
 # STAGE 8: wild-type reference ensemble
 # ==============================================================================
-# The wild type is the chain as it left Stage 2, before MODELLER. Settings MUST
+# The wild type is the chain as it left Stage 2, before mutagenesis. Settings MUST
 # match Stage 7 exactly or the comparison is void.
 WT_CHAIN_PDB="$WORKDIR/${PDB_LOWER}.pdb"
 
@@ -296,7 +284,7 @@ fi
 #
 # --source-pdb is the WILD-TYPE chain, never sam2_input.pdb: the mutant's
 # residue names no longer match the Stage 4 prediction, so the identity check
-# would correctly reject it. MODELLER preserves numbering and residue order, so
+# would correctly reject it. Mutagenesis preserves numbering and residue order, so
 # the wild-type chain maps both ensembles.
 if [ "$POCKET_ANALYSIS" = true ] && [ -f "$WORKDIR/ensemble_output.top.pdb" ]; then
     echo
