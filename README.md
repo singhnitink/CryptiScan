@@ -17,7 +17,7 @@ flowchart TB
 
 The pipeline runs fully locally inside an Apptainer container (`pipeline_local.sif`), which you build once from this repository plus the model weights archived on Zenodo. After the build, all scripts, dependencies, and model weights are packaged in the image. Internet access is then only required if downloading structures from RCSB; providing a local `.pdb` file path allows fully offline execution.
 
-**Model weights (Zenodo):** [10.5281/zenodo.XXXXXXX](https://doi.org/10.5281/zenodo.XXXXXXX)
+**Model weights (Zenodo):** [10.5281/zenodo.23507674](https://doi.org/10.5281/zenodo.23507674)
 
 ---
 
@@ -44,7 +44,7 @@ cd CryptiScan
 
 ### 2. Download the model weights (~15 GB) from Zenodo
 
-The weights are too large for GitHub and are archived on Zenodo ([10.5281/zenodo.XXXXXXX](https://doi.org/10.5281/zenodo.XXXXXXX)).
+The weights are too large for GitHub and are archived on Zenodo ([10.5281/zenodo.23507674](https://doi.org/10.5281/zenodo.23507674)).
 
 ```bash
 wget -O cryptiscan_weights.zip "https://zenodo.org/records/XXXXXXX/files/cryptiscan_weights.zip?download=1"
@@ -236,4 +236,4 @@ If you use CryptiScan, please cite:
 
 > [Manuscript citation, to be added]
 
-Model weights: Routh, R. et al. *CryptiScan model weights*, version 1.0.0. Zenodo (2026). https://doi.org/10.5281/zenodo.XXXXXXX
+Model weights: Routh, R. et al. *CryptiScan model weights*, version 1.0.0. Zenodo (2026). https://doi.org/10.5281/zenodo.23507674
