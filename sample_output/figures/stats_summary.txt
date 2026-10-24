@@ -1,0 +1,56 @@
+CryptiScan -- mutant versus wild type
+============================================================================
+
+cryptic-site SASA  [A^2]
+   wild type :     80.985 +/- 0.486   (median 79.410, n=2000)
+   mutant    :    204.504 +/- 1.002   (median 200.368, n=2000)
+   delta     :   +123.519
+   Cliff's d :     +0.993   (large)
+   Mann-Whitney p = 0.000e+00   KS D = 0.959, p = 0.000e+00
+
+radius of gyration  [A]
+   wild type :     17.472 +/- 0.006   (median 17.457, n=2000)
+   mutant    :     17.489 +/- 0.007   (median 17.466, n=2000)
+   delta     :     +0.017
+   Cliff's d :     +0.031   (negligible)
+   Mann-Whitney p = 9.043e-02   KS D = 0.036, p = 1.497e-01
+
+backbone RMSD  [A]
+   wild type :      2.955 +/- 0.012   (median 2.914, n=2000)
+   mutant    :      3.034 +/- 0.012   (median 3.013, n=2000)
+   delta     :     +0.079
+   Cliff's d :     +0.094   (negligible)
+   Mann-Whitney p = 2.542e-07   KS D = 0.086, p = 6.245e-07
+
+helix content  [fraction]
+   wild type :      0.639 +/- 0.001   (median 0.640, n=2000)
+   mutant    :      0.641 +/- 0.001   (median 0.646, n=2000)
+   delta     :     +0.002
+   Cliff's d :     +0.037   (negligible)
+   Mann-Whitney p = 4.008e-02   KS D = 0.042, p = 5.872e-02
+
+sheet content  [fraction]
+   wild type :      0.005 +/- 0.000   (median 0.000, n=2000)
+   mutant    :      0.006 +/- 0.000   (median 0.000, n=2000)
+   delta     :     +0.001
+   Cliff's d :     +0.114   (negligible)
+   Mann-Whitney p = 6.862e-13   KS D = 0.118, p = 1.519e-12
+
+cryptic-pocket volume (all frames)  [A^3]
+   wild type :    208.257 +/- 4.470   (median 259.601, n=2000)
+   mutant    :    576.662 +/- 5.166   (median 570.091, n=2000)
+   delta     :   +368.405
+   Cliff's d :     +0.795   (large)
+   Mann-Whitney p = 0.000e+00   KS D = 0.683, p = 0.000e+00
+
+non-cryptic pocket volume  [A^3]
+   wild type :   4640.945 +/- 20.415   (median 4591.419, n=2000)
+   mutant    :   4576.893 +/- 20.192   (median 4567.037, n=2000)
+   delta     :    -64.052
+   Cliff's d :     -0.036   (negligible)
+   Mann-Whitney p = 4.768e-02   KS D = 0.035, p = 1.725e-01
+
+Frames are independent draws from a generative model, not a time
+series: SEM = sigma/sqrt(N) with no block averaging, and two-sample
+tests apply directly. With N in the thousands a p-value is driven by
+sample size -- report Cliff's delta as the result.
