@@ -34,7 +34,7 @@ From: nvcr.io/nvidia/cuda:12.5.1-base-ubuntu24.04
 	required_files_weights/check_stage10.py /opt/pipeline/check_stage10.py
 	# Stage-2 chain from the sample run; %test mutates it to prove the
 	# mutagenesis env works end to end. Path is relative to pipeline/.
-	../sample_output/2wgb.pdb /opt/pipeline/testdata/2wgb.pdb
+	required_files_weights/testdata/2wgb.pdb /opt/pipeline/testdata/2wgb.pdb
 
 	# Model weights -> /opt/models and /opt/sam2_weights
 	# NOTE: the ProtT5 destination name must keep the substring "prot_t5" --
