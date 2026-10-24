@@ -1,0 +1,8 @@
+[MUTATE] input  2wgb_step2.pdb
+[MUTATE] mutate A/GLY124 -> ARG
+[MUTATE] atoms  2692 total, 1352 mobile (7 heavy)
+[MUTATE] energy       826708.4 kJ/mol  (as built)
+[MUTATE] energy        29401.8 kJ/mol  (minimised)
+[MUTATE] energy        28965.5 kJ/mol  (annealed 300-400-500-600-500-400-300 K, minimised)
+[MUTATE] max displacement of fixed atoms: 0.00e+00 A
+[MUTATE] output 2wgb_step2ARG124.pdb

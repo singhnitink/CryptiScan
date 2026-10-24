@@ -1,0 +1,8 @@
+[MUTATE] input  2wgb_step3.pdb
+[MUTATE] mutate A/PHE151 -> ARG
+[MUTATE] atoms  2696 total, 1356 mobile (7 heavy)
+[MUTATE] energy        84133.7 kJ/mol  (as built)
+[MUTATE] energy        28018.2 kJ/mol  (minimised)
+[MUTATE] energy        27887.3 kJ/mol  (annealed 300-400-500-600-500-400-300 K, minimised)
+[MUTATE] max displacement of fixed atoms: 0.00e+00 A
+[MUTATE] output 2wgb_step3ARG151.pdb

@@ -1,0 +1,40 @@
+{
+  "source": "2wgb_local_20261023_205020/2wgb_raw.pdb",
+  "protein_file": "2wgb_protein.pdb",
+  "chains": [
+    "A",
+    "B"
+  ],
+  "n_protein_residues": 325,
+  "n_waters_dropped": 169,
+  "ligands": [
+    {
+      "resname": "SO4",
+      "resid": 1186,
+      "chain": "A",
+      "n_atoms": 5,
+      "file": "2wgb_ligands/SO4_A1186.pdb"
+    },
+    {
+      "resname": "SO4",
+      "resid": 1187,
+      "chain": "A",
+      "n_atoms": 5,
+      "file": "2wgb_ligands/SO4_A1187.pdb"
+    },
+    {
+      "resname": "SO4",
+      "resid": 1187,
+      "chain": "B",
+      "n_atoms": 5,
+      "file": "2wgb_ligands/SO4_B1187.pdb"
+    },
+    {
+      "resname": "SO4",
+      "resid": 1188,
+      "chain": "B",
+      "n_atoms": 5,
+      "file": "2wgb_ligands/SO4_B1188.pdb"
+    }
+  ]
+}

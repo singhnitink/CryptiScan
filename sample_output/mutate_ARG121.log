@@ -1,0 +1,9 @@
+[MUTATE] input  2wgb.pdb
+[MUTATE] mutate A/PHE121 -> ARG
+[MUTATE] rebuilding missing heavy atoms in 2 other residue(s); their side chains are relaxed as well
+[MUTATE] atoms  2678 total, 1358 mobile (21 heavy)
+[MUTATE] energy       240225.7 kJ/mol  (as built)
+[MUTATE] energy        30405.0 kJ/mol  (minimised)
+[MUTATE] energy        30240.8 kJ/mol  (annealed 300-400-500-600-500-400-300 K, minimised)
+[MUTATE] max displacement of fixed atoms: 0.00e+00 A
+[MUTATE] output 2wgbARG121.pdb

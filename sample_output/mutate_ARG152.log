@@ -1,0 +1,8 @@
+[MUTATE] input  2wgb_step4.pdb
+[MUTATE] mutate A/TRP152 -> ARG
+[MUTATE] atoms  2696 total, 1359 mobile (7 heavy)
+[MUTATE] energy       114074.6 kJ/mol  (as built)
+[MUTATE] energy        27057.6 kJ/mol  (minimised)
+[MUTATE] energy        26903.6 kJ/mol  (annealed 300-400-500-600-500-400-300 K, minimised)
+[MUTATE] max displacement of fixed atoms: 0.00e+00 A
+[MUTATE] output 2wgb_step4ARG152.pdb
