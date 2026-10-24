@@ -1,0 +1,98 @@
+======================================================================
+ CRYPTIC POCKET VOLUME  --  CryptiScan Stage 9
+======================================================================
+ cryptic residues (aSAM numbering) : 113, 116, 140, 141, 144
+ pocket definition                 : fpocket -P (guided)
+ fpocket -u (min explicit atoms)   : 2   (fpocket's own default of 4 returns nothing)
+ fpocket build                     : ***** POCKET HUNTING BEGINS *****
+ identification                    : >= 2 lining residues and centroid within 12 A
+
+ WILD TYPE
+   frames analysed            : 2000
+   pocket open                : 1121  (56.0 %)
+   mean volume, ALL frames    : 208.3 +/- 4.5 A^3    <-- headline
+   mean volume, open frames   : 371.6 +/- 3.1 A^3
+   median / 95th pct (open)   : 361.2 / 549.9 A^3
+   largest pocket seen        : 1005.9 A^3
+   mean druggability (open)   : 0.066  (4 % of open frames > 0.5)
+   cryptic-residue SASA       : 81.0 A^2
+   volume distribution (open frames, A^3)
+        124-    198 | ## 20
+        198-    271 | ################# 128
+        271-    345 | ############################################ 330
+        345-    418 | ############################################## 343
+        418-    491 | ######################## 184
+        491-    565 | ######### 68
+        565-    638 | ### 28
+        638-    712 | # 9
+        712-    785 |  6
+        785-    859 |  3
+        859-    932 |  1
+        932-   1006 |  1
+   controls
+     pockets per frame        : 16.0
+     non-cryptic pocket vol   : 4640.9 +/- 20.4 A^3
+     radius of gyration       : 17.47 +/- 0.29 A
+     backbone RMSD from input : 2.95 A
+     helix / sheet content    : 63.9 % / 0.5 %
+
+ MUTANT
+   frames analysed            : 2000
+   pocket open                : 1880  (94.0 %)
+   mean volume, ALL frames    : 576.7 +/- 5.2 A^3    <-- headline
+   mean volume, open frames   : 613.5 +/- 4.3 A^3
+   median / 95th pct (open)   : 588.1 / 948.1 A^3
+   largest pocket seen        : 1598.4 A^3
+   mean druggability (open)   : 0.019  (1 % of open frames > 0.5)
+   cryptic-residue SASA       : 204.5 A^2
+   volume distribution (open frames, A^3)
+        163-    282 | # 14
+        282-    402 | ################ 174
+        402-    522 | ############################################# 477
+        522-    641 | ############################################## 486
+        641-    761 | ################################### 370
+        761-    881 | #################### 215
+        881-   1000 | ####### 75
+       1000-   1120 | ### 37
+       1120-   1239 | # 20
+       1239-   1359 |  6
+       1359-   1479 |  5
+       1479-   1598 |  1
+   controls
+     pockets per frame        : 17.0
+     non-cryptic pocket vol   : 4576.9 +/- 20.2 A^3
+     radius of gyration       : 17.49 +/- 0.30 A
+     backbone RMSD from input : 3.03 A
+     helix / sheet content    : 64.1 % / 0.6 %
+
+----------------------------------------------------------------------
+ MUTANT vs WILD TYPE
+----------------------------------------------------------------------
+   delta mean volume          : +368.4 A^3
+   fold change                : 2.77 x
+   delta open fraction        : +37.9 percentage points
+   Mann-Whitney U (mut>wt)    : p = 0.000e+00
+   Kolmogorov-Smirnov         : D = 0.683, p = 0.000e+00
+   Cliff's delta (effect size): +0.795
+
+   Frames are independent samples, so these two-sample tests
+   apply directly -- no block averaging or correlation-time
+   correction is needed, unlike a molecular-dynamics trajectory.
+
+   SPECIFICITY  (did only the cryptic pocket change?)
+     delta non-cryptic volume : -64.1 A^3
+     specificity ratio        : 5.8 x   (cryptic change / background change; >5 is clean)
+
+   FOLD INTEGRITY  (is the mutant still folded?)
+     delta radius of gyration : +0.02 A
+     delta helix content      : +0.2 pp
+     delta sheet content      : +0.1 pp
+     These should all be near zero. A large shift means the
+     substitutions perturbed the fold, and the volume change
+     may be local unfolding rather than a genuine cavity.
+
+   NOTE: open fractions from a generative model are Boltzmann-
+   weighted only insofar as the model reproduces its training
+   distribution. Report these as a relative mutant-vs-wild-type
+   comparison, not as thermodynamic populations.
+======================================================================
