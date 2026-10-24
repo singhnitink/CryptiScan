@@ -80,9 +80,9 @@ Run every command below from this `pipeline/` directory.
 The weights are too large for GitHub and are archived on Zenodo ([10.5281/zenodo.23527537](https://doi.org/10.5281/zenodo.23527537)). The archive also contains the driver scripts, so unzipping it populates `required_files_weights/` completely.
 
 ```bash
-wget -O cryptiscan_weights.zip "https://zenodo.org/records/23527537/files/cryptiscan_weights.zip?download=1"
-md5sum cryptiscan_weights.zip     # compare against the MD5 shown on the Zenodo record
-unzip -o cryptiscan_weights.zip   # fills required_files_weights/
+wget -O required_files_weights.zip "https://zenodo.org/records/23527537/files/required_files_weights.zip?download=1"
+md5sum required_files_weights.zip     # compare against the MD5 shown on the Zenodo record
+unzip -o required_files_weights.zip   # fills required_files_weights/
 ```
 
 Check the download:
